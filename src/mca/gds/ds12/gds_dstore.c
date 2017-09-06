@@ -3201,12 +3201,18 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
     pmix_nspace_t *ns = peer->nptr;
     char *msg;
     pmix_status_t rc;
-    size_t j, n, size, len;
-    pmix_info_t *iptr;
-    pmix_rank_t rank;
-    pmix_kval_t *kp2;
-    uint8_t *tmp;
-    char **nodes=NULL, **procs=NULL;
+    //size_t j, n, size, len;
+    //pmix_info_t *iptr;
+    //pmix_rank_t rank;
+    //pmix_kval_t *kp2;
+    //uint8_t *tmp;
+    //char **nodes=NULL, **procs=NULL;
+    pmix_proc_t proc;
+    pmix_cb_t cb;
+    pmix_kval_t *kv;
+    pmix_buffer_t buf;
+    pmix_kval_t *kv2 = NULL;
+    pmix_rank_info_t *rinfo;
 
     pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
                         "[%s:%d] gds:dstore:register_job_info for peer [%s:%d]",
@@ -3214,10 +3220,44 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
                         peer->info->pname.nspace, peer->info->pname.rank);
 
     if (0 == ns->ndelivered) { // don't store twice
+#if 1
+        kv2 = PMIX_NEW(pmix_kval_t);
+        PMIX_VALUE_CREATE(kv2->value, 1);
+        kv2->value->type = PMIX_BYTE_OBJECT;
+
+        proc.rank = PMIX_RANK_WILDCARD;
+        (void)strncpy(proc.nspace, ns->nspace, PMIX_MAX_NSLEN);
+        PMIX_CONSTRUCT(&cb, pmix_cb_t);
+        cb.proc = &proc;
+        cb.scope = PMIX_INTERNAL;
+        cb.copy = false;
+
+        PMIX_LIST_FOREACH(rinfo, &ns->ranks, pmix_rank_info_t) {
+            pmix_output_verbose(1, pmix_globals.debug_output,
+                        "dstore_register_job_info: ranks %u", rinfo->pname.rank);
+        }
+
+        PMIX_GDS_FETCH_KV(rc, pmix_globals.mypeer, &cb);
+
+        PMIX_CONSTRUCT(&buf, pmix_buffer_t);
+        PMIX_LIST_FOREACH(kv, &cb.kvs, pmix_kval_t) {
+            pmix_output_verbose(1, pmix_globals.debug_output,
+                        "dstore_register_job_info: rank %u, key %s", proc.rank, kv->key);
+            PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &buf, kv, 1, PMIX_KVAL);
+        }
+        PMIX_UNLOAD_BUFFER(&buf, kv2->value->data.bo.bytes, kv2->value->data.bo.size);
+        if (PMIX_SUCCESS != (rc = _dstore_store(ns->nspace, proc.rank, kv2))) {
+            PMIX_ERROR_LOG(rc);
+            return rc;
+        }
+        PMIX_RELEASE(kv2);
+        PMIX_DESTRUCT(&buf);
+
+        //_collect_key_for_rank
+        //_collected_key_dstore_store
+#else
         for (n=0; n < ns->njobinfo; n++) {
             if (0 == strcmp(ns->jobinfo[n].key, PMIX_PROC_DATA)) {
-
-
                 if (PMIX_DATA_ARRAY != ns->jobinfo[n].value.type) {
                     rc = PMIX_ERR_BAD_PARAM;
                     PMIX_ERROR_LOG(rc);
@@ -3317,6 +3357,7 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
         }
         /* store all keys in thr dstore */
         _collected_key_dstore_store(ns);
+#endif
     }
 
     /* answer to client */

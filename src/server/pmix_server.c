@@ -2112,12 +2112,20 @@ static pmix_status_t server_switchyard(pmix_peer_t *peer, uint32_t tag,
                         cmd, peer->info->pname.nspace, peer->info->pname.rank);
 
     if (PMIX_REQ_CMD == cmd) {
+        double time_job_reg;
         reply = PMIX_NEW(pmix_buffer_t);
         if (NULL == reply) {
             PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
             return PMIX_ERR_NOMEM;
         }
+
+        time_job_reg = GET_TS;
         PMIX_GDS_REGISTER_JOB_INFO(rc, peer, reply);
+        time_job_reg = GET_TS - time_job_reg;
+        pmix_output_verbose(1, pmix_globals.debug_output,
+                        "PMIX_REQ_CMD: time job reg %lf rank %u",
+                        time_job_reg, peer->info->pname.rank);
+
         if (PMIX_SUCCESS != rc) {
             PMIX_ERROR_LOG(rc);
             return rc;

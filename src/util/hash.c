@@ -72,6 +72,9 @@ pmix_status_t pmix_hash_store(pmix_hash_table_t *table,
     uint64_t id;
     pmix_kval_t *hv;
 
+    pmix_output_verbose(1, pmix_globals.debug_output,
+                "pmix_hash_store: rank %u, key %s", rank, kin->key);
+
     pmix_output_verbose(10, pmix_globals.debug_output,
                         "HASH:STORE rank %d key %s",
                         rank, (NULL == kin) ? "NULL KVAL" : kin->key);

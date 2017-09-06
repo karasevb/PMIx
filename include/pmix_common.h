@@ -1904,4 +1904,13 @@ PMIX_EXPORT pmix_status_t PMIx_Data_copy_payload(pmix_data_buffer_t *dest,
 }
 #endif
 
+#include <time.h>
+#define GET_TS ({ \
+    struct timespec ts;                     \
+    double ret;                             \
+    clock_gettime(CLOCK_MONOTONIC, &ts);    \
+    ret = ts.tv_sec + 1E-9 * ts.tv_nsec;    \
+    ret;                                    \
+})
+
 #endif
