@@ -373,6 +373,7 @@ static void _register_nspace(int sd, short args, void *cbdata)
     pmix_nspace_t *nptr, *tmp;
     pmix_status_t rc;
     size_t i;
+    size_t n;
 
     PMIX_ACQUIRE_OBJECT(caddy);
 
@@ -413,17 +414,23 @@ static void _register_nspace(int sd, short args, void *cbdata)
     }
 
     /* register nspace for each activate components */
-    PMIX_GDS_ADD_NSPACE(rc, nptr->nspace, cd->info, cd->ninfo);
+    PMIX_GDS_ADD_NSPACE(rc, nptr, cd->info, cd->ninfo);
     if (PMIX_SUCCESS != rc) {
         goto release;
     }
 
-    /* store this data in our own GDS module - we will retrieve
-     * it later so it can be passed down to the launched procs
-     * once they connect to us and we know what GDS module they
-     * are using */
-    PMIX_GDS_CACHE_JOB_INFO(rc, pmix_globals.mypeer, nptr,
-                            cd->info, cd->ninfo);
+    /* this is duplicative, but for now, we copy the data to the nspace
+     * jobinfo array as well as cache it internally so we can look it
+     * up if required. We will later figure out a way to reconstruct
+     * the jobinfo array when required */
+    PMIX_INFO_CREATE(nptr->jobinfo, cd->ninfo);
+    nptr->njobinfo = cd->ninfo;
+    for (n=0; n < cd->ninfo; n++) {
+        (void)strncpy(nptr->jobinfo[n].key, cd->info[n].key, PMIX_MAX_KEYLEN);
+        PMIX_BFROPS_VALUE_XFER(rc, pmix_globals.mypeer,
+                               &nptr->jobinfo[n].value,
+                               &cd->info[n].value);
+    }
 
   release:
     if (NULL != cd->opcbfunc) {
@@ -2117,6 +2124,16 @@ static pmix_status_t server_switchyard(pmix_peer_t *peer, uint32_t tag,
             PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
             return PMIX_ERR_NOMEM;
         }
+
+        if (0 == peer->nptr->ndelivered) { // don't do it twice
+            /* store this data in our own GDS module - we will retrieve
+             * it later so it can be passed down to the launched procs
+             * once they connect to us and we know what GDS module they
+             * are using */
+            PMIX_GDS_CACHE_JOB_INFO(rc, peer, peer->nptr,
+                                    peer->nptr->jobinfo, peer->nptr->njobinfo);
+        }
+
         PMIX_GDS_REGISTER_JOB_INFO(rc, peer, reply);
         if (PMIX_SUCCESS != rc) {
             PMIX_ERROR_LOG(rc);

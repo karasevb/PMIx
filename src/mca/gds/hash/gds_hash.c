@@ -74,7 +74,7 @@ static pmix_status_t hash_fetch(const pmix_proc_t *proc,
 
 static pmix_status_t setup_fork(const pmix_proc_t *peer, char ***env);
 
-static pmix_status_t nspace_add(const char *nspace,
+static pmix_status_t nspace_add(struct pmix_nspace_t *ns,
                                 pmix_info_t info[],
                                 size_t ninfo);
 
@@ -391,6 +391,7 @@ pmix_status_t hash_cache_job_info(struct pmix_nspace_t *ns,
         return PMIX_SUCCESS;
     }
 
+#if 0
     /* this is duplicative, but for now, we copy the data to the nspace
      * jobinfo array as well as cache it internally so we can look it
      * up if required. We will later figure out a way to reconstruct
@@ -403,6 +404,7 @@ pmix_status_t hash_cache_job_info(struct pmix_nspace_t *ns,
                                &nptr->jobinfo[n].value,
                                &info[n].value);
     }
+#endif
 
     /* cache the job info on the internal hash table for this nspace */
     ht = &trk->internal;
@@ -1581,11 +1583,11 @@ static pmix_status_t setup_fork(const pmix_proc_t *proc, char ***env)
     return PMIX_SUCCESS;
 }
 
-static pmix_status_t nspace_add(const char *nspace,
+static pmix_status_t nspace_add(struct pmix_nspace_t *ns,
                                 pmix_info_t info[],
                                 size_t ninfo)
 {
-    /* we don't need to do anything here */
+    /* we don't need to add anything */
     return PMIX_SUCCESS;
 }
 

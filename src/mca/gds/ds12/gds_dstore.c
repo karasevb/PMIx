@@ -262,7 +262,7 @@ static pmix_status_t dstore_fetch(const pmix_proc_t *proc,
                                 pmix_info_t info[], size_t ninfo,
                                 pmix_list_t *kvs);
 
-static pmix_status_t dstore_add_nspace(const char *nspace,
+static pmix_status_t dstore_add_nspace(struct pmix_nspace_t *ns,
                                 pmix_info_t info[],
                                 size_t ninfo);
 
@@ -2674,7 +2674,7 @@ static pmix_status_t dstore_setup_fork(const pmix_proc_t *peer, char ***env)
     return rc;
 }
 
-static pmix_status_t dstore_add_nspace(const char *nspace,
+static pmix_status_t dstore_add_nspace(struct pmix_nspace_t *ns,
                                 pmix_info_t info[],
                                 size_t ninfo)
 {
@@ -2684,6 +2684,7 @@ static pmix_status_t dstore_add_nspace(const char *nspace,
     char setjobuid = _setjobuid;
     size_t n;
     ns_map_data_t *ns_map = NULL;
+    pmix_nspace_t *nptr = (pmix_nspace_t*)ns;
 
     pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
                         "gds: dstore add nspace");
@@ -2705,7 +2706,7 @@ static pmix_status_t dstore_add_nspace(const char *nspace,
             PMIX_ERROR_LOG(rc);
             return rc;
         }
-        ns_map = _esh_session_map(nspace, tbl_idx);
+        ns_map = _esh_session_map(nptr->nspace, tbl_idx);
         if (NULL == ns_map) {
             rc = PMIX_ERROR;
             PMIX_ERROR_LOG(rc);
@@ -2719,13 +2720,13 @@ static pmix_status_t dstore_add_nspace(const char *nspace,
         }
     }
     else {
-        ns_map = _esh_session_map(nspace, tbl_idx);
+        ns_map = _esh_session_map(nptr->nspace, tbl_idx);
         if (NULL == ns_map) {
             rc = PMIX_ERROR;
             PMIX_ERROR_LOG(rc);
             return rc;
         }
-    }
+    }   
 
     return PMIX_SUCCESS;
 }
