@@ -765,6 +765,11 @@ static pmix_status_t register_info(pmix_peer_t *peer,
     }
 
   release:
+    if (NULL != ns->jobinfo) {
+        PMIX_INFO_FREE(ns->jobinfo, ns->njobinfo);
+        ns->jobinfo = NULL;
+        ns->njobinfo = 0;
+    }
     /* cleanup */
     if (NULL != nodes) {
         pmix_argv_free(nodes);
@@ -799,13 +804,14 @@ static pmix_status_t hash_register_job_info(struct pmix_peer_t *pr,
                         pmix_globals.myid.nspace, pmix_globals.myid.rank,
                         peer->info->pname.nspace, peer->info->pname.rank);
 
-
+#if 0
     /* NOTE: we do not need to worry here about PMIX_REGISTER_NODATA
      * as there will be no jobinfo stored on this nspace object
      * if that directive has been given */
     if (NULL == ns->jobinfo) {
         return PMIX_SUCCESS;
     }
+#endif
 
     /* first see if we already have processed this data
      * for another peer in this nspace so we don't waste

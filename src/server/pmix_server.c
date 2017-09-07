@@ -423,13 +423,15 @@ static void _register_nspace(int sd, short args, void *cbdata)
      * jobinfo array as well as cache it internally so we can look it
      * up if required. We will later figure out a way to reconstruct
      * the jobinfo array when required */
-    PMIX_INFO_CREATE(nptr->jobinfo, cd->ninfo);
-    nptr->njobinfo = cd->ninfo;
-    for (n=0; n < cd->ninfo; n++) {
-        (void)strncpy(nptr->jobinfo[n].key, cd->info[n].key, PMIX_MAX_KEYLEN);
-        PMIX_BFROPS_VALUE_XFER(rc, pmix_globals.mypeer,
-                               &nptr->jobinfo[n].value,
-                               &cd->info[n].value);
+    if (NULL == nptr->jobinfo) {
+        PMIX_INFO_CREATE(nptr->jobinfo, cd->ninfo);
+        nptr->njobinfo = cd->ninfo;
+        for (n=0; n < cd->ninfo; n++) {
+            (void)strncpy(nptr->jobinfo[n].key, cd->info[n].key, PMIX_MAX_KEYLEN);
+            PMIX_BFROPS_VALUE_XFER(rc, pmix_globals.mypeer,
+                                   &nptr->jobinfo[n].value,
+                                   &cd->info[n].value);
+        }
     }
 
   release:
