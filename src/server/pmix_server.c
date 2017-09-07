@@ -412,18 +412,18 @@ static void _register_nspace(int sd, short args, void *cbdata)
         }
     }
 
-    /* register nspace for each activate components */
-    PMIX_GDS_ADD_NSPACE(rc, nptr->nspace, cd->info, cd->ninfo);
-    if (PMIX_SUCCESS != rc) {
-        goto release;
-    }
-
     /* store this data in our own GDS module - we will retrieve
      * it later so it can be passed down to the launched procs
      * once they connect to us and we know what GDS module they
      * are using */
     PMIX_GDS_CACHE_JOB_INFO(rc, pmix_globals.mypeer, nptr,
                             cd->info, cd->ninfo);
+
+    /* register nspace for each activate components */
+    PMIX_GDS_ADD_NSPACE(rc, nptr->nspace, cd->info, cd->ninfo);
+    if (PMIX_SUCCESS != rc) {
+        goto release;
+    }
 
   release:
     if (NULL != cd->opcbfunc) {
