@@ -3318,6 +3318,10 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
         }
         /* store all keys in thr dstore */
         _collected_key_dstore_store(ns);
+
+        if (NULL != ns->jobinfo) {
+            PMIX_INFO_FREE(ns->jobinfo, ns->njobinfo);
+        }
     }
 
     /* answer to client */
