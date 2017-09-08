@@ -1904,4 +1904,17 @@ PMIX_EXPORT pmix_status_t PMIx_Data_copy_payload(pmix_data_buffer_t *dest,
 }
 #endif
 
+#define GET_TS ({ \
+    struct timeval ts;                     \
+    double ret;                            \
+    gettimeofday(&ts, NULL);               \
+    ret = ts.tv_sec + 1E-6 * ts.tv_usec;   \
+    ret;                                   \
+})
+
+typedef struct {
+    char name[32];
+    double ts;
+} pmix_debug_ts_lst_t;
+
 #endif

@@ -417,7 +417,7 @@ static void _register_nspace(int sd, short args, void *cbdata)
      * jobinfo array as well as cache it internally so we can look it
      * up if required. We will later figure out a way to reconstruct
      * the jobinfo array when required */
-    if (NULL == nptr->jobinfo) {
+    /*if (NULL == nptr->jobinfo) {
         PMIX_INFO_CREATE(nptr->jobinfo, cd->ninfo);
         nptr->njobinfo = cd->ninfo;
         for (n=0; n < cd->ninfo; n++) {
@@ -426,7 +426,9 @@ static void _register_nspace(int sd, short args, void *cbdata)
                                    &nptr->jobinfo[n].value,
                                    &cd->info[n].value);
         }
-    }
+    }*/
+    nptr->jobinfo = cd->info;
+    nptr->njobinfo = cd->ninfo;
 
     /* register nspace for each activate components */
     PMIX_GDS_ADD_NSPACE(rc, nptr, cd->info, cd->ninfo);
