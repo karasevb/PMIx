@@ -223,9 +223,9 @@ static inline void _esh_sessions_cleanup(void);
 static inline void _esh_ns_map_cleanup(void);
 static inline int _esh_dir_del(const char *dirname);
 
-static inline int _collect_key_for_rank(pmix_peer_t *peer, pmix_rank_t rank, pmix_kval_t *kv);
+static inline int _collect_key_for_rank(pmix_rank_t rank, pmix_kval_t *kv);
 static inline int _collected_key_dstore_store(pmix_nspace_t *nptr);
-static inline pmix_status_t store_map(pmix_peer_t *peer, char **nodes, char **ppn);
+static inline pmix_status_t store_map(const char *nspace, char **nodes, char **ppn);
 
 static inline int _my_client(const char *nspace, pmix_rank_t rank);
 
@@ -2674,6 +2674,125 @@ static pmix_status_t dstore_setup_fork(const pmix_proc_t *peer, char ***env)
     return rc;
 }
 
+static pmix_status_t dstore_provide_job_info(pmix_nspace_t *ns)
+{
+    pmix_status_t rc;
+    size_t j, n, size, len;
+    pmix_info_t *iptr;
+    pmix_rank_t rank;
+    pmix_kval_t *kp2;
+    uint8_t *tmp;
+    char **nodes=NULL, **procs=NULL;
+
+    if (0 == ns->ndelivered) { // don't store twice
+        for (n=0; n < ns->njobinfo; n++) {
+            if (0 == strcmp(ns->jobinfo[n].key, PMIX_PROC_DATA)) {
+
+
+                if (PMIX_DATA_ARRAY != ns->jobinfo[n].value.type) {
+                    rc = PMIX_ERR_BAD_PARAM;
+                    PMIX_ERROR_LOG(rc);
+                    return rc;
+                }
+                size = ns->jobinfo[n].value.data.darray->size;
+                iptr = (pmix_info_t*)ns->jobinfo[n].value.data.darray->array;
+                /* first element of the array must be the rank */
+                if (0 != strcmp(iptr[0].key, PMIX_RANK) ||
+                    PMIX_PROC_RANK != iptr[0].value.type) {
+                    rc = PMIX_ERR_BAD_PARAM;
+                    PMIX_ERROR_LOG(rc);
+                    return rc;
+                }
+                rank = iptr[0].value.data.rank;
+                /* cycle thru the values for this rank and store them */
+                for (j=1; j < size; j++) {
+                    kp2 = PMIX_NEW(pmix_kval_t);
+                    if (NULL == kp2) {
+                        rc = PMIX_ERR_NOMEM;
+                        return rc;
+                    }
+                    kp2->key = strdup(iptr[j].key);
+                    PMIX_VALUE_XFER(rc, kp2->value, &iptr[j].value);
+                    if (PMIX_SUCCESS != rc) {
+                        PMIX_ERROR_LOG(rc);
+                        PMIX_RELEASE(kp2);
+                        return rc;
+                    }
+                    /* if the value contains a string that is longer than the
+                     * limit, then compress it */
+                    if (PMIX_STRING_SIZE_CHECK(kp2->value)) {
+                        if (pmix_util_compress_string(kp2->value->data.string, &tmp, &len)) {
+                            if (NULL == tmp) {
+                                PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
+                                rc = PMIX_ERR_NOMEM;
+                                return rc;
+                            }
+                            kp2->value->type = PMIX_COMPRESSED_STRING;
+                            free(kp2->value->data.string);
+                            kp2->value->data.bo.bytes = (char*)tmp;
+                            kp2->value->data.bo.size = len;
+                        }
+                    }
+                    /* store it in the tmp buf */
+                    if (PMIX_SUCCESS != (rc = _collect_key_for_rank(rank, kp2))) {
+                        PMIX_ERROR_LOG(rc);
+                        PMIX_RELEASE(kp2);
+                        return rc;
+                    }
+                    PMIX_RELEASE(kp2);  // maintain acctg
+                }
+            } else if (0 == strcmp(ns->jobinfo[n].key, PMIX_NODE_MAP)) {
+                /* parse the regex to get the argv array of node names */
+                if (PMIX_SUCCESS != (rc = pmix_preg.parse_nodes(ns->jobinfo[n].value.data.string, &nodes))) {
+                    PMIX_ERROR_LOG(rc);
+                    return rc;
+                }
+                /* if we have already found the proc map, then parse
+                 * and store the detailed map */
+                if (NULL != procs) {
+                    if (PMIX_SUCCESS != (rc = store_map(ns->nspace, nodes, procs))) {
+                        PMIX_ERROR_LOG(rc);
+                        return rc;
+                    }
+                }
+            } else if (0 == strcmp(ns->jobinfo[n].key, PMIX_PROC_MAP)) {
+                /* parse the regex to get the argv array containing proc ranks on each node */
+                if (PMIX_SUCCESS != (rc = pmix_preg.parse_procs(ns->jobinfo[n].value.data.string, &procs))) {
+                    PMIX_ERROR_LOG(rc);
+                    return rc;
+                }
+                /* if we have already recv'd the node map, then parse
+                 * and store the detailed map */
+                if (NULL != nodes) {
+                    if (PMIX_SUCCESS != (rc = store_map(ns->nspace, nodes, procs))) {
+                        PMIX_ERROR_LOG(rc);
+                        return rc;
+                    }
+                }
+            } else {
+                pmix_kval_t *kv = PMIX_NEW(pmix_kval_t);
+                PMIX_VALUE_CREATE(kv->value, 1);
+                kv->key = strdup(ns->jobinfo[n].key);
+                PMIX_VALUE_XFER(rc, kv->value, &ns->jobinfo[n].value);
+                if (PMIX_SUCCESS != rc) {
+                    PMIX_ERROR_LOG(rc);
+                    PMIX_RELEASE(kv);
+                    return rc;
+                }
+                if ( PMIX_SUCCESS != (rc = _collect_key_for_rank(PMIX_RANK_WILDCARD, kv))) {
+                    PMIX_RELEASE(kv);
+                    PMIX_ERROR_LOG(rc);
+                    return rc;
+                }
+            }
+        }
+        /* store all keys in thr dstore */
+        _collected_key_dstore_store(ns);
+    }
+
+    return rc;
+}
+
 static pmix_status_t dstore_add_nspace(struct pmix_nspace_t *ns,
                                 pmix_info_t info[],
                                 size_t ninfo)
@@ -2727,6 +2846,8 @@ static pmix_status_t dstore_add_nspace(struct pmix_nspace_t *ns,
             return rc;
         }
     }   
+
+    dstore_provide_job_info(nptr);
 
     return PMIX_SUCCESS;
 }
@@ -2945,7 +3066,7 @@ static pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
     return rc;
 }
 
-static inline int _collect_key_for_rank(pmix_peer_t *peer, pmix_rank_t rank, pmix_kval_t *kv)
+static inline int _collect_key_for_rank(pmix_rank_t rank, pmix_kval_t *kv)
 {
     pmix_status_t rc = PMIX_SUCCESS;
     uint32_t i, size;
@@ -3024,7 +3145,7 @@ exit:
     return rc;
 }
 
-static inline pmix_status_t store_map(pmix_peer_t *peer,
+static inline pmix_status_t store_map(const char *nspace,
                                char **nodes, char **ppn)
 {
     pmix_status_t rc;
@@ -3052,7 +3173,7 @@ static inline pmix_status_t store_map(pmix_peer_t *peer,
         /* check and see if we already have data for this node */
         val = NULL;
         proc.rank = PMIX_RANK_WILDCARD;
-        (void)strncpy(proc.nspace, peer->nptr->nspace, PMIX_MAX_NSLEN);
+        (void)strncpy(proc.nspace, nspace, PMIX_MAX_NSLEN);
         PMIX_CONSTRUCT(&cb, pmix_cb_t);
         cb.proc = &proc;
         cb.scope = PMIX_INTERNAL;
@@ -3117,7 +3238,7 @@ static inline pmix_status_t store_map(pmix_peer_t *peer,
                 PMIX_INFO_LOAD(&info[kp2->value->data.darray->size-1], PMIX_LOCAL_PEERS, ppn[n], PMIX_STRING);
                 kp2->value->data.darray->array = info;
 
-                if (PMIX_SUCCESS != (rc = _collect_key_for_rank(peer, PMIX_RANK_WILDCARD, kp2))) {
+                if (PMIX_SUCCESS != (rc = _collect_key_for_rank(PMIX_RANK_WILDCARD, kp2))) {
                     PMIX_ERROR_LOG(rc);
                     PMIX_RELEASE(kp2);
                     return rc;
@@ -3151,7 +3272,7 @@ static inline pmix_status_t store_map(pmix_peer_t *peer,
             PMIX_INFO_LOAD(&info[0], PMIX_LOCAL_PEERS, ppn[n], PMIX_STRING);
             kp2->value->data.darray->array = info;
             kp2->value->data.darray->size = 1;
-            if (PMIX_SUCCESS != (rc = _collect_key_for_rank(peer, PMIX_RANK_WILDCARD, kp2))) {
+            if (PMIX_SUCCESS != (rc = _collect_key_for_rank(PMIX_RANK_WILDCARD, kp2))) {
                 PMIX_ERROR_LOG(rc);
                 PMIX_RELEASE(kp2);
                 return rc;
@@ -3169,7 +3290,7 @@ static inline pmix_status_t store_map(pmix_peer_t *peer,
             kp2->value->type = PMIX_STRING;
             kp2->value->data.string = strdup(nodes[n]);
             rank = strtol(procs[m], NULL, 10);
-            if (PMIX_SUCCESS != (rc = _collect_key_for_rank(peer, rank, kp2))) {
+            if (PMIX_SUCCESS != (rc = _collect_key_for_rank(rank, kp2))) {
                 PMIX_ERROR_LOG(rc);
                 PMIX_RELEASE(kp2);
                 pmix_argv_free(procs);
@@ -3187,7 +3308,7 @@ static inline pmix_status_t store_map(pmix_peer_t *peer,
     kp2->value = (pmix_value_t*)malloc(sizeof(pmix_value_t));
     kp2->value->type = PMIX_STRING;
     kp2->value->data.string = pmix_argv_join(nodes, ',');
-    if (PMIX_SUCCESS != (rc = _collect_key_for_rank(peer, PMIX_RANK_WILDCARD, kp2))) {
+    if (PMIX_SUCCESS != (rc = _collect_key_for_rank(PMIX_RANK_WILDCARD, kp2))) {
         PMIX_ERROR_LOG(rc);
         PMIX_RELEASE(kp2);
         return rc;
@@ -3213,116 +3334,6 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
                         "[%s:%d] gds:dstore:register_job_info for peer [%s:%d]",
                         pmix_globals.myid.nspace, pmix_globals.myid.rank,
                         peer->info->pname.nspace, peer->info->pname.rank);
-
-    if (0 == ns->ndelivered) { // don't store twice
-        for (n=0; n < ns->njobinfo; n++) {
-            if (0 == strcmp(ns->jobinfo[n].key, PMIX_PROC_DATA)) {
-
-
-                if (PMIX_DATA_ARRAY != ns->jobinfo[n].value.type) {
-                    rc = PMIX_ERR_BAD_PARAM;
-                    PMIX_ERROR_LOG(rc);
-                    return rc;
-                }
-                size = ns->jobinfo[n].value.data.darray->size;
-                iptr = (pmix_info_t*)ns->jobinfo[n].value.data.darray->array;
-                /* first element of the array must be the rank */
-                if (0 != strcmp(iptr[0].key, PMIX_RANK) ||
-                    PMIX_PROC_RANK != iptr[0].value.type) {
-                    rc = PMIX_ERR_BAD_PARAM;
-                    PMIX_ERROR_LOG(rc);
-                    return rc;
-                }
-                rank = iptr[0].value.data.rank;
-                /* cycle thru the values for this rank and store them */
-                for (j=1; j < size; j++) {
-                    kp2 = PMIX_NEW(pmix_kval_t);
-                    if (NULL == kp2) {
-                        rc = PMIX_ERR_NOMEM;
-                        return rc;
-                    }
-                    kp2->key = strdup(iptr[j].key);
-                    PMIX_VALUE_XFER(rc, kp2->value, &iptr[j].value);
-                    if (PMIX_SUCCESS != rc) {
-                        PMIX_ERROR_LOG(rc);
-                        PMIX_RELEASE(kp2);
-                        return rc;
-                    }
-                    /* if the value contains a string that is longer than the
-                     * limit, then compress it */
-                    if (PMIX_STRING_SIZE_CHECK(kp2->value)) {
-                        if (pmix_util_compress_string(kp2->value->data.string, &tmp, &len)) {
-                            if (NULL == tmp) {
-                                PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
-                                rc = PMIX_ERR_NOMEM;
-                                return rc;
-                            }
-                            kp2->value->type = PMIX_COMPRESSED_STRING;
-                            free(kp2->value->data.string);
-                            kp2->value->data.bo.bytes = (char*)tmp;
-                            kp2->value->data.bo.size = len;
-                        }
-                    }
-                    /* store it in the tmp buf */
-                    if (PMIX_SUCCESS != (rc = _collect_key_for_rank(peer, rank, kp2))) {
-                        PMIX_ERROR_LOG(rc);
-                        PMIX_RELEASE(kp2);
-                        return rc;
-                    }
-                    PMIX_RELEASE(kp2);  // maintain acctg
-                }
-            } else if (0 == strcmp(ns->jobinfo[n].key, PMIX_NODE_MAP)) {
-                /* parse the regex to get the argv array of node names */
-                if (PMIX_SUCCESS != (rc = pmix_preg.parse_nodes(ns->jobinfo[n].value.data.string, &nodes))) {
-                    PMIX_ERROR_LOG(rc);
-                    return rc;
-                }
-                /* if we have already found the proc map, then parse
-                 * and store the detailed map */
-                if (NULL != procs) {
-                    if (PMIX_SUCCESS != (rc = store_map(peer, nodes, procs))) {
-                        PMIX_ERROR_LOG(rc);
-                        return rc;
-                    }
-                }
-            } else if (0 == strcmp(ns->jobinfo[n].key, PMIX_PROC_MAP)) {
-                /* parse the regex to get the argv array containing proc ranks on each node */
-                if (PMIX_SUCCESS != (rc = pmix_preg.parse_procs(ns->jobinfo[n].value.data.string, &procs))) {
-                    PMIX_ERROR_LOG(rc);
-                    return rc;
-                }
-                /* if we have already recv'd the node map, then parse
-                 * and store the detailed map */
-                if (NULL != nodes) {
-                    if (PMIX_SUCCESS != (rc = store_map(peer, nodes, procs))) {
-                        PMIX_ERROR_LOG(rc);
-                        return rc;
-                    }
-                }
-            } else {
-                pmix_kval_t *kv = PMIX_NEW(pmix_kval_t);
-                PMIX_VALUE_CREATE(kv->value, 1);
-                kv->key = strdup(ns->jobinfo[n].key);
-                PMIX_VALUE_XFER(rc, kv->value, &ns->jobinfo[n].value);
-                if (PMIX_SUCCESS != rc) {
-                    PMIX_ERROR_LOG(rc);
-                    PMIX_RELEASE(kv);
-                    return rc;
-                }
-                if ( PMIX_SUCCESS != (rc = _collect_key_for_rank(peer, PMIX_RANK_WILDCARD, kv))) {
-                    PMIX_RELEASE(kv);
-                    PMIX_ERROR_LOG(rc);
-                    return rc;
-                }
-            }
-        }
-        /* store all keys in thr dstore */
-        _collected_key_dstore_store(ns);
-
-        if (NULL != ns->jobinfo) {
-            PMIX_INFO_FREE(ns->jobinfo, ns->njobinfo);
-        }
-    }
 
     /* answer to client */
     msg = ns->nspace;
