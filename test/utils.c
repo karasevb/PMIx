@@ -73,11 +73,13 @@ static void set_namespace(int nprocs, char *ranks, char *name)
     (void)strncpy(info[4].key, PMIX_NODE_MAP, PMIX_MAX_KEYLEN);
     info[4].value.type = PMIX_STRING;
     info[4].value.data.string = regex;
+    TEST_ERROR(("PMIx_generate_regex %s", regex));
 
     PMIx_generate_ppn(ranks, &ppn);
     (void)strncpy(info[5].key, PMIX_PROC_MAP, PMIX_MAX_KEYLEN);
     info[5].value.type = PMIX_STRING;
     info[5].value.data.string = ppn;
+    TEST_ERROR(("PMIx_generate_ppn %s", ppn));
 
     (void)strncpy(info[6].key, PMIX_JOB_SIZE, PMIX_MAX_KEYLEN);
     info[6].value.type = PMIX_UINT32;
