@@ -355,32 +355,6 @@ PMIX_CLASS_INSTANCE(ns_track_elem_t,
                     pmix_value_array_t,
                     ncon, ndes);
 
-/* this required for v1.2 compatibility support */
-typedef struct {
-    pmix_list_item_t super;
-    char *name;              // name of the node
-    char *procs;             // comma-separated list of proc ranks on that node
-} pmix_nrec_t;
-PMIX_CLASS_DECLARATION(pmix_nrec_t);
-
-static void nreccon(pmix_nrec_t *p)
-{
-    p->name = NULL;
-    p->procs = NULL;
-}
-static void nrecdes(pmix_nrec_t *p)
-{
-    if (NULL != p->name) {
-        free(p->name);
-    }
-    if (NULL != p->procs) {
-        free(p->procs);
-    }
-}
-PMIX_EXPORT PMIX_CLASS_INSTANCE(pmix_nrec_t,
-                                pmix_list_item_t,
-                                nreccon, nrecdes);
-
 static inline void _esh_session_map_clean(ns_map_t *m) {
     memset(m, 0, sizeof(*m));
     m->data.track_idx = -1;
@@ -2975,23 +2949,21 @@ static pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
     return rc;
 }
 
-static pmix_status_t _store_job_info_12(pmix_proc_t *proc)
+static pmix_status_t _store_job_info(pmix_proc_t *proc)
 {
     pmix_cb_t cb;
     pmix_kval_t *kv;
     pmix_buffer_t buf;
-    pmix_kval_t *kv2 = NULL;
+    pmix_kval_t *kv2 = NULL, *kvp;
     pmix_status_t rc = PMIX_SUCCESS;
-    pmix_byte_object_t *bo;
-    pmix_nrec_t *nrec, *nr2;
-    int32_t cnt;
-    size_t nnodes;
-    pmix_buffer_t buf2;
-    uint32_t i;
-    pmix_list_t nodes;
 
-    PMIX_CONSTRUCT(&buf, pmix_buffer_t);
     PMIX_CONSTRUCT(&cb, pmix_cb_t);
+    PMIX_CONSTRUCT(&buf, pmix_buffer_t);
+
+    kvp = PMIX_NEW(pmix_kval_t);
+    PMIX_VALUE_CREATE(kvp->value, 1);
+    kvp->value->type = PMIX_BYTE_OBJECT;
+
     cb.proc = proc;
     cb.scope = PMIX_INTERNAL;
     cb.copy = false;
@@ -3005,77 +2977,33 @@ static pmix_status_t _store_job_info_12(pmix_proc_t *proc)
         goto exit;
     }
 
-    PMIX_CONSTRUCT(&buf, pmix_buffer_t);
     PMIX_LIST_FOREACH(kv, &cb.kvs, pmix_kval_t) {
-        if (0 == strcmp(kv->key, PMIX_MAP_BLOB)) {
-            PMIX_CONSTRUCT(&nodes, pmix_list_t);
-            /* transfer the byte object for unpacking */
-            bo = &(kv->value->data.bo);
-            PMIX_CONSTRUCT(&buf2, pmix_buffer_t);
-            PMIX_LOAD_BUFFER(pmix_globals.mypeer, &buf2, bo->bytes, bo->size);
+      if (!PMIX_PROC_IS_V21(_client_peer()) && 0 != strncmp("pmix.", kv->key, 4) &&
+                kv->value->type == PMIX_DATA_ARRAY) {
+            pmix_info_t *info;
+            size_t size, i;
+            info = kv->value->data.darray->array;
+            size = kv->value->data.darray->size;
 
-    pmix_output_hexdump(1, pmix_globals.debug_output,
-                        buf2.base_ptr, buf2.bytes_used);
-            /* start by unpacking the number of nodes */
-            cnt = 1;
-            PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &buf2, &nnodes, &cnt, PMIX_SIZE);
-            if (rc != PMIX_SUCCESS) {
-                PMIX_ERROR_LOG(rc);
-                PMIX_DESTRUCT(&buf2);
-                goto exit;
-            }
-            /* unpack the list of procs on each node */
-            for (i=0; i < nnodes; i++) {
-                cnt = 1;
-                kv2 = PMIX_NEW(pmix_kval_t);
-                PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &buf2, kv2, &cnt, PMIX_KVAL);
-                if (rc != PMIX_SUCCESS) {
-                    PMIX_ERROR_LOG(rc);
-                    PMIX_DESTRUCT(&buf2);
-                    PMIX_RELEASE(kv2);
-                    goto exit;
-                }
-                /* the name of the node is in the key, and the value is
-                 * a comma-delimited list of procs on that node. See if we already
-                 * have this node */
-                nrec = NULL;
-                PMIX_LIST_FOREACH(nr2, &nodes, pmix_nrec_t) {
-                    if (0 == strcmp(nr2->name, kv2->key)) {
-                        nrec = nr2;
-                        break;
-                    }
-                }
-                if (NULL == nrec) {
-                    /* Create a node record and store that list */
-                    nrec = PMIX_NEW(pmix_nrec_t);
-                    if (NULL == nrec) {
-                        PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
-                        PMIX_DESTRUCT(&buf2);
+            for (i = 0; i < size; i++) {
+                if (0 == strcmp(PMIX_LOCAL_PEERS, info[i].key)) {
+                    kv2 = PMIX_NEW(pmix_kval_t);
+                    kv2->key = strdup(kv->key);
+                    PMIX_VALUE_XFER(rc, kv2->value, &info[i].value);
+                    if (PMIX_SUCCESS != rc) {
+                        PMIX_ERROR_LOG(rc);
                         PMIX_RELEASE(kv2);
                         goto exit;
                     }
-                    nrec->name = strdup(kv2->key);
-                    pmix_list_append(&nodes, &nrec->super);
-                } else {
-                    /* refresh the list */
-                    if (NULL != nrec->procs) {
-                        free(nrec->procs);
+                    PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &buf, kv2, 1, PMIX_KVAL);
+                    if (PMIX_SUCCESS != rc) {
+                        PMIX_ERROR_LOG(rc);
+                        PMIX_RELEASE(kv2);
+                        goto exit;
                     }
-                }
-                nrec->procs = strdup(kv2->value->data.string);
-                /* split the list of procs so we can store their
-                 * individual location data */
-                PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &buf, kv2, 1, PMIX_KVAL);
-                if (PMIX_SUCCESS != rc) {
-                    PMIX_ERROR_LOG(rc);
-                    PMIX_DESTRUCT(&buf2);
                     PMIX_RELEASE(kv2);
-                    goto exit;
                 }
-                PMIX_RELEASE(kv2);
             }
-            /* cleanup */
-            PMIX_DESTRUCT(&buf2);
         } else {
             PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &buf, kv, 1, PMIX_KVAL);
             if (PMIX_SUCCESS != rc) {
@@ -3084,71 +3012,16 @@ static pmix_status_t _store_job_info_12(pmix_proc_t *proc)
             }
         }
     }
-    kv2 = PMIX_NEW(pmix_kval_t);
-    PMIX_VALUE_CREATE(kv2->value, 1);
-    kv2->value->type = PMIX_BYTE_OBJECT;
 
-    PMIX_UNLOAD_BUFFER(&buf, kv2->value->data.bo.bytes, kv2->value->data.bo.size);
+    PMIX_UNLOAD_BUFFER(&buf, kvp->value->data.bo.bytes, kvp->value->data.bo.size);
 
-    if (PMIX_SUCCESS != (rc = _dstore_store(proc->nspace, proc->rank, kv2))) {
+    if (PMIX_SUCCESS != (rc = _dstore_store(proc->nspace, proc->rank, kvp))) {
         PMIX_ERROR_LOG(rc);
         goto exit;
     }
 
 exit:
-    if (NULL != kv2) {
-        PMIX_RELEASE(kv2);
-    }
-    PMIX_DESTRUCT(&cb);
-    PMIX_DESTRUCT(&buf);
-    return rc;
-}
-
-
-static pmix_status_t _store_job_info_21(pmix_proc_t *proc)
-{
-    pmix_cb_t cb;
-    pmix_kval_t *kv;
-    pmix_buffer_t buf;
-    pmix_kval_t *kv2 = NULL;
-    pmix_status_t rc = PMIX_SUCCESS;
-
-    kv2 = PMIX_NEW(pmix_kval_t);
-    PMIX_VALUE_CREATE(kv2->value, 1);
-    kv2->value->type = PMIX_BYTE_OBJECT;
-
-    PMIX_CONSTRUCT(&buf, pmix_buffer_t);
-    PMIX_CONSTRUCT(&cb, pmix_cb_t);
-    cb.proc = proc;
-    cb.scope = PMIX_INTERNAL;
-    cb.copy = false;
-
-    PMIX_GDS_FETCH_KV(rc, pmix_globals.mypeer, &cb);
-    if (PMIX_SUCCESS != rc) {
-        if (rc == PMIX_ERR_PROC_ENTRY_NOT_FOUND) {
-            /* there is no error if no data for job info */
-            rc = PMIX_SUCCESS;
-        }
-        goto exit;
-    }
-
-    PMIX_CONSTRUCT(&buf, pmix_buffer_t);
-    PMIX_LIST_FOREACH(kv, &cb.kvs, pmix_kval_t) {
-        PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &buf, kv, 1, PMIX_KVAL);
-        if (PMIX_SUCCESS != rc) {
-            PMIX_ERROR_LOG(rc);
-            goto exit;
-        }
-    }
-    PMIX_UNLOAD_BUFFER(&buf, kv2->value->data.bo.bytes, kv2->value->data.bo.size);
-
-    if (PMIX_SUCCESS != (rc = _dstore_store(proc->nspace, proc->rank, kv2))) {
-        PMIX_ERROR_LOG(rc);
-        goto exit;
-    }
-
-exit:
-    PMIX_RELEASE(kv2);
+    PMIX_RELEASE(kvp);
     PMIX_DESTRUCT(&cb);
     PMIX_DESTRUCT(&buf);
     return rc;
@@ -3173,12 +3046,7 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
         _client_compat_save(peer);
         (void)strncpy(proc.nspace, ns->nspace, PMIX_MAX_NSLEN);
         proc.rank = PMIX_RANK_WILDCARD;
-        if (PMIX_PROC_IS_V21(_client_peer())) {
-            rc = _store_job_info_21(&proc);
-        } else {
-            rc = _store_job_info_12(&proc);
-        }
-
+        rc = _store_job_info(&proc);
         if (PMIX_SUCCESS != rc) {
             PMIX_ERROR_LOG(rc);
             return rc;
@@ -3186,11 +3054,7 @@ static pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
 
         PMIX_LIST_FOREACH(rinfo, &ns->ranks, pmix_rank_info_t) {
             proc.rank = rinfo->pname.rank;
-            if (PMIX_PROC_IS_V21(_client_peer())) {
-                rc = _store_job_info_21(&proc);
-            } else {
-                rc = _store_job_info_12(&proc);
-            }
+            rc = _store_job_info(&proc);
             if (PMIX_SUCCESS != rc) {
                 PMIX_ERROR_LOG(rc);
                 return rc;
@@ -3236,6 +3100,7 @@ static void _client_compat_save(pmix_peer_t *peer)
         _clients_peer->nptr = nptr;
     }
     _clients_peer->nptr->compat = peer->nptr->compat;
+    _clients_peer->proc_type = peer->proc_type;
 }
 
 static inline pmix_peer_t * _client_peer(void)
