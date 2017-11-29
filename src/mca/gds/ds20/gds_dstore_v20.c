@@ -48,7 +48,7 @@
 #include "src/mca/preg/preg.h"
 
 #include "src/mca/gds/base/base.h"
-#include "gds_dstore.h"
+#include "gds_dstore_v20.h"
 #include "src/mca/pshmem/base/base.h"
 
 #define ESH_REGION_EXTENSION        "EXTENSION_SLOT"
@@ -59,7 +59,7 @@
 #define ESH_ENV_LINEAR              "SM_USE_LINEAR_SEARCH"
 
 #define ESH_MIN_KEY_LEN             (sizeof(ESH_REGION_INVALIDATED))
-#if 0
+
 #define ESH_KV_SIZE(addr)                                   \
 __extension__ ({                                            \
     size_t sz;                                              \
@@ -108,6 +108,7 @@ __extension__ ({                                            \
 #define EXT_SLOT_SIZE()                                     \
     (ESH_KEY_SIZE(ESH_REGION_EXTENSION, sizeof(size_t)))
 
+
 #define ESH_PUT_KEY(addr, key, buffer, size)                \
 __extension__ ({                                            \
     size_t sz = ESH_KEY_SIZE(key, size);                    \
@@ -118,70 +119,6 @@ __extension__ ({                                            \
     memcpy(addr + sizeof(size_t) + ESH_KNAME_LEN(key),      \
             buffer, size);                                  \
 })
-#else
-#define ESH_KEY_SIZE(key, size)                             \
-__extension__ ({                                            \
-    size_t len = strlen(key) + 1 + sizeof(size_t) + size;   \
-    len;                                                    \
-})
-
-/* in ext slot new offset will be stored in case if
- * new data were added for the same process during
- * next commit
- */
-#define EXT_SLOT_SIZE()                                     \
-    (ESH_KEY_SIZE(ESH_REGION_EXTENSION, sizeof(size_t)))
-
-
-#define ESH_KV_SIZE(addr)                                   \
-__extension__ ({                                            \
-    size_t sz;                                              \
-    memcpy(&sz, addr + ESH_KNAME_LEN(ESH_KNAME_PTR(addr)),  \
-        sizeof(size_t));                                    \
-    sz += ESH_KNAME_LEN(ESH_KNAME_PTR(addr)) +              \
-        sizeof(size_t);                                     \
-    sz;                                                     \
-})
-
-#define ESH_KNAME_PTR(addr)                                 \
-__extension__ ({                                            \
-    char *name_ptr = (char *)addr;                          \
-    name_ptr;                                               \
-})
-
-#define ESH_KNAME_LEN(key)                                  \
-__extension__ ({                                            \
-    size_t len = strlen((char*)key) + 1;                    \
-    len;                                                    \
-})
-
-#define ESH_DATA_PTR(addr)                                  \
-__extension__ ({                                            \
-    uint8_t *data_ptr =                                     \
-        addr +                                              \
-        sizeof(size_t) +                                    \
-        ESH_KNAME_LEN(ESH_KNAME_PTR(addr));                 \
-    data_ptr;                                               \
-})
-
-#define ESH_DATA_SIZE(addr, data_size)                      \
-__extension__ ({                                            \
-    memcpy(data_size,                                       \
-        addr + ESH_KNAME_LEN(ESH_KNAME_PTR(addr)),          \
-        sizeof(size_t));                                    \
-    data_size;                                              \
-})
-
-#define ESH_PUT_KEY(addr, key, buffer, size)                \
-__extension__ ({                                            \
-    size_t sz = size;                                       \
-    memset(addr, 0, ESH_KNAME_LEN(key));                    \
-    strncpy((char *)addr, key, ESH_KNAME_LEN(key));         \
-    memcpy(addr + ESH_KNAME_LEN(key), &sz, sizeof(size_t)); \
-    memcpy(addr + ESH_KNAME_LEN(key) + sizeof(size_t),      \
-            buffer, size);                                  \
-})
-#endif
 
 #ifdef ESH_PTHREAD_LOCK
 #define _ESH_LOCK(rwlock, func)                             \
@@ -336,8 +273,8 @@ static pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
                                 pmix_list_t *cbs,
                                 pmix_byte_object_t *bo);
 
-pmix_gds_base_module_t pmix_ds12_module = {
-    .name = "ds12",
+pmix_gds_base_module_t pmix_ds20_module = {
+    .name = "ds20",
     .init = dstore_init,
     .finalize = dstore_finalize,
     .assign_module = dstore_assign_module,
@@ -885,7 +822,7 @@ static inline int _esh_session_init(size_t idx, ns_map_data_t *m, size_t jobuid,
     /* create a lock file to prevent clients from reading while server is writing to the shared memory.
     * This situation is quite often, especially in case of direct modex when clients might ask for data
     * simultaneously.*/
-    if(0 > asprintf(&s->lockfile, "%s/dstore_sm.lock", s->nspace_path)) {
+    if(0 > asprintf(&s->lockfile, "%s/dstore_v20_sm.lock", s->nspace_path)) {
         rc = PMIX_ERR_OUT_OF_RESOURCE;
         PMIX_ERROR_LOG(rc);
         return rc;
@@ -2087,7 +2024,7 @@ static pmix_status_t dstore_init(pmix_info_t info[], size_t ninfo)
             }
         }
 
-        rc = asprintf(&_base_path, "%s/pmix_dstor_%d", dstor_tmpdir, getpid());
+        rc = asprintf(&_base_path, "%s/pmix_dstor_v20_%d", dstor_tmpdir, getpid());
         if ((0 > rc) || (NULL == _base_path)) {
             rc = PMIX_ERR_OUT_OF_RESOURCE;
             PMIX_ERROR_LOG(rc);
@@ -2556,7 +2493,7 @@ static pmix_status_t _dstore_fetch(const char *nspace, pmix_rank_t rank,
                             __FILE__, __LINE__, __func__, nspace, cur_rank, key));
                 /* target key is found, get value */
                 uint8_t *data_ptr = ESH_DATA_PTR(addr);
-                size_t data_size = ESH_DATA_SIZE(addr, &data_size);
+                size_t data_size = ESH_DATA_SIZE(addr, data_ptr);
                 PMIX_CONSTRUCT(&buffer, pmix_buffer_t);
                 PMIX_LOAD_BUFFER(_client_peer(), &buffer, data_ptr, data_size);
                 int cnt = 1;
@@ -2841,13 +2778,13 @@ static pmix_status_t dstore_assign_module(pmix_info_t *info, size_t ninfo,
     size_t n, m;
     char **options;
 
-    *priority = 20;
+    *priority = 30;
     if (NULL != info) {
         for (n=0; n < ninfo; n++) {
             if (0 == strncmp(info[n].key, PMIX_GDS_MODULE, PMIX_MAX_KEYLEN)) {
                 options = pmix_argv_split(info[n].value.data.string, ',');
                 for (m=0; NULL != options[m]; m++) {
-                    if (0 == strcmp(options[m], "ds12")) {
+                    if (0 == strcmp(options[m], "ds20")) {
                         /* they specifically asked for us */
                         *priority = 100;
                         break;
@@ -2856,7 +2793,7 @@ static pmix_status_t dstore_assign_module(pmix_info_t *info, size_t ninfo,
                         /* they are asking for any dstore module - we
                          * take an intermediate priority in case another
                          * dstore is more modern than us */
-                        *priority = 40;
+                        *priority = 50;
                         break;
                     }
                 }
@@ -2867,9 +2804,9 @@ static pmix_status_t dstore_assign_module(pmix_info_t *info, size_t ninfo,
     }
 
 #if 0
-    if PMIX_GDS_MODULE != "ds12"
+    if PMIX_GDS_MODULE != "ds20"
         *proirity = 0;
-    else PMIX_GDS_MODULE == "ds12" || !PMIX_GDS_MODULE
+    else PMIX_GDS_MODULE == "ds20" || !PMIX_GDS_MODULE
         *priority = -1;
 #endif
     return PMIX_SUCCESS;

@@ -498,6 +498,7 @@ PMIX_EXPORT pmix_status_t PMIx_Init(pmix_proc_t *proc,
      * our server- the selection will be based
      * on the corresponding envars that should have been passed
      * to us at launch */
+
     evar = getenv("PMIX_GDS_MODULE");
     if (NULL != evar) {
         PMIX_INFO_LOAD(&ginfo, PMIX_GDS_MODULE, evar, PMIX_STRING);

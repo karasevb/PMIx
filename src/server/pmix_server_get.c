@@ -665,7 +665,7 @@ static pmix_status_t _satisfy_request(pmix_nspace_t *nptr, pmix_rank_t rank,
         cb.proc = &proc;
         cb.scope = scope;
         cb.copy = false;
-        PMIX_GDS_FETCH_KV(rc, peer, &cb);
+        PMIX_GDS_FETCH_KV(rc, pmix_globals.mypeer, &cb);
         if (PMIX_SUCCESS == rc) {
             found = true;
             PMIX_CONSTRUCT(&pkt, pmix_buffer_t);
@@ -723,6 +723,12 @@ static pmix_status_t _satisfy_request(pmix_nspace_t *nptr, pmix_rank_t rank,
         /* pass it back */
         cbfunc(rc, data, sz, cbdata, relfn, data);
         return rc;
+    }
+
+    if ((PMIX_LOCAL == scope) && !found) {
+        /* pass PMIX_ERR_NOT_FOUND for local request if it's not found*/
+        cbfunc(PMIX_ERR_NOT_FOUND, NULL, 0, cbdata, NULL, NULL);
+        return PMIX_SUCCESS;
     }
 
     return PMIX_ERR_NOT_FOUND;
