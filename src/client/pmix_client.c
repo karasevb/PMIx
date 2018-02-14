@@ -59,7 +59,6 @@
 #endif
 static const char pmix_version_string[] = PMIX_VERSION;
 
-
 #include "src/class/pmix_list.h"
 #include "src/event/pmix_event.h"
 #include "src/util/argv.h"
@@ -227,6 +226,8 @@ static void job_data(struct pmix_peer_t *pr,
     int32_t cnt = 1;
     pmix_cb_t *cb = (pmix_cb_t*)cbdata;
 
+    PMIX_CONNECT_LOG_PRINT("recvd job data");
+
     /* unpack the nspace - should be same as our own */
     PMIX_BFROPS_UNPACK(rc, pmix_client_globals.myserver,
                        buf, &nspace, &cnt, PMIX_STRING);
@@ -242,6 +243,7 @@ static void job_data(struct pmix_peer_t *pr,
     PMIX_GDS_STORE_JOB_INFO(cb->status,
                             pmix_client_globals.myserver,
                             nspace, buf);
+    PMIX_CONNECT_LOG_PRINT("store job data %d", cb->status);
     cb->status = PMIX_SUCCESS;
     PMIX_POST_OBJECT(cb);
     PMIX_WAKEUP_THREAD(&cb->lock);
@@ -550,6 +552,8 @@ PMIX_EXPORT pmix_status_t PMIx_Init(pmix_proc_t *proc,
         PMIX_RELEASE_THREAD(&pmix_global_lock);
         return rc;
     }
+    PMIX_CONNECT_LOG_INIT();
+    PMIX_CONNECT_LOG_PRINT("send connect req");
     /* send to the server */
     PMIX_CONSTRUCT(&cb, pmix_cb_t);
     PMIX_PTL_SEND_RECV(rc, pmix_client_globals.myserver,
@@ -562,6 +566,9 @@ PMIX_EXPORT pmix_status_t PMIx_Init(pmix_proc_t *proc,
     PMIX_WAIT_THREAD(&cb.lock);
     rc = cb.status;
     PMIX_DESTRUCT(&cb);
+
+    PMIX_CONNECT_LOG_PRINT("connect comleted %d", rc);
+    PMIX_CONNECT_LOG_FINI();
 
     if (PMIX_SUCCESS == rc) {
         pmix_globals.init_cntr++;
@@ -592,7 +599,6 @@ PMIX_EXPORT pmix_status_t PMIx_Init(pmix_proc_t *proc,
     if (NULL != info) {
         _check_for_notify(info, ninfo);
     }
-
     return PMIX_SUCCESS;
 }
 

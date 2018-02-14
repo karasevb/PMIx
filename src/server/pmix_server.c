@@ -283,11 +283,13 @@ PMIX_EXPORT pmix_status_t PMIx_server_init(pmix_server_module_t *module,
     /* add it to the end of the list of recvs */
     pmix_list_append(&pmix_ptl_globals.posted_recvs, &req->super);
 
+    PMIX_CONNECT_LOG_INIT();
     /* start listening for connections */
     if (PMIX_SUCCESS != pmix_ptl_base_start_listening(info, ninfo)) {
         pmix_show_help("help-pmix-server.txt", "listener-thread-start", true);
         PMIx_server_finalize();
         PMIX_RELEASE_THREAD(&pmix_global_lock);
+        PMIX_CONNECT_LOG_FINI();
         return PMIX_ERR_INIT;
     }
 
@@ -303,6 +305,7 @@ PMIX_EXPORT pmix_status_t PMIx_server_finalize(void)
     pmix_peer_t *peer;
 
     PMIX_ACQUIRE_THREAD(&pmix_global_lock);
+    PMIX_CONNECT_LOG_FINI();
     if (pmix_globals.init_cntr <= 0) {
         PMIX_RELEASE_THREAD(&pmix_global_lock);
         return PMIX_ERR_INIT;
@@ -2132,6 +2135,7 @@ static pmix_status_t server_switchyard(pmix_peer_t *peer, uint32_t tag,
                         cmd, peer->info->pname.nspace, peer->info->pname.rank);
 
     if (PMIX_REQ_CMD == cmd) {
+        PMIX_CONNECT_LOG_PRINT("recvd connect from [%s:%d]", peer->info->pname.nspace, peer->info->pname.rank);
         reply = PMIX_NEW(pmix_buffer_t);
         if (NULL == reply) {
             PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
@@ -2144,6 +2148,9 @@ static pmix_status_t server_switchyard(pmix_peer_t *peer, uint32_t tag,
         }
         PMIX_SERVER_QUEUE_REPLY(peer, tag, reply);
         peer->nptr->ndelivered++;
+        PMIX_CONNECT_LOG_PRINT("reply connect to [%s:%d] ndelivered %lu, tag %u",
+            peer->info->pname.nspace, peer->info->pname.rank, peer->nptr->ndelivered, tag);
+
         return PMIX_SUCCESS;
     }
 

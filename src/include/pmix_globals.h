@@ -25,6 +25,7 @@
 
 #include <src/include/types.h>
 
+#include <math.h>
 #include <unistd.h>
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
@@ -45,6 +46,45 @@
 #include "src/mca/ptl/ptl.h"
 
 BEGIN_C_DECLS
+
+#define PMIX_CONNECT_LOG_OFFSET \
+    (pmix_globals.pmix_debug_buffer + pmix_globals.pmix_debug_buffer_size)
+
+#define PMIX_CONNECT_LOG_PRINT( ... ) \
+do { \
+        char str[512]; \
+        struct tm* tm_info; \
+        char tm_buf[26]; \
+        struct timeval tv; \
+        gettimeofday(&tv, NULL); \
+        int millisec = lrint(tv.tv_usec/1000.0); \
+        if (millisec>=1000) { \
+             millisec -=1000; \
+            tv.tv_sec++; \
+        } \
+        tm_info = localtime(&tv.tv_sec); \
+        strftime(tm_buf, 26, "%Y:%m:%d %H:%M:%S", tm_info); \
+        snprintf(str, 512, __VA_ARGS__); \
+        str[511] = 0; \
+        if (pmix_globals.pmix_debug_buffer_init) { \
+            pmix_globals.pmix_debug_buffer_size += sprintf(PMIX_CONNECT_LOG_OFFSET, \
+                "[%s.%03d] %s\n", tm_buf, millisec, str); \
+        } \
+} while(0)
+
+#define PMIX_CONNECT_LOG_INIT() \
+do { \
+    pmix_globals.pmix_debug_buffer_size = 0; \
+    pmix_globals.pmix_debug_buffer_init = 1; \
+    memset(pmix_globals.pmix_debug_buffer, 0x0, sizeof(pmix_globals.pmix_debug_buffer)); \
+    PMIX_CONNECT_LOG_PRINT("log init"); \
+} while(0)
+
+#define PMIX_CONNECT_LOG_FINI() \
+do { \
+    PMIX_CONNECT_LOG_PRINT("log fini"); \
+    pmix_globals.pmix_debug_buffer_init = 0; \
+} while(0)
 
 /* some limits */
 #define PMIX_MAX_CRED_SIZE      131072              // set max at 128kbytes
@@ -377,6 +417,10 @@ typedef struct {
      * interface so that other parts of the process can
      * look them up */
     pmix_gds_base_module_t *mygds;
+    int connect_log_fd;
+    char pmix_debug_buffer[4096];
+    size_t pmix_debug_buffer_size;
+    bool pmix_debug_buffer_init;
 } pmix_globals_t;
 
 
