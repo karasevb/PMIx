@@ -1137,6 +1137,19 @@ static int _pmix_getpagesize(void)
 #endif
 }
 
+#define PMIX_DSTORE_MEM_INFO_PREFIX "PMIX_DSTORE_MEM_INFO_"
+#define PMIX_DSTORE_MEM_VAL_MAX 32
+
+#define PMIX_DSTORE_MEM_INFO_EXPORT( _prefix, _size ) \
+do { \
+    char *env_old_val = NULL, env_new_val[PMIX_DSTORE_MEM_VAL_MAX]; \
+    size_t tmp_size = _size; \
+    env_old_val = getenv(PMIX_DSTORE_MEM_INFO_PREFIX _prefix); \
+    tmp_size += env_old_val ? atoi(env_old_val) : 0; \
+    snprintf(env_new_val, PMIX_DSTORE_MEM_VAL_MAX, "%lu", tmp_size); \
+    setenv(PMIX_DSTORE_MEM_INFO_PREFIX _prefix, env_new_val, 1); \
+} while (0);
+
 static seg_desc_t *_create_new_segment(segment_type type, const ns_map_data_t *ns_map, uint32_t id)
 {
     pmix_status_t rc;
@@ -1153,16 +1166,22 @@ static seg_desc_t *_create_new_segment(segment_type type, const ns_map_data_t *n
             size = _initial_segment_size;
             snprintf(file_name, PMIX_PATH_MAX, "%s/initial-pmix_shared-segment-%u",
                 _ESH_SESSION_path(ns_map->tbl_idx), id);
+
+            PMIX_DSTORE_MEM_INFO_EXPORT("INITIAL_SEGMENT", size);
             break;
         case NS_META_SEGMENT:
             size = _meta_segment_size;
             snprintf(file_name, PMIX_PATH_MAX, "%s/smseg-%s-%u",
                 _ESH_SESSION_path(ns_map->tbl_idx), ns_map->name, id);
+
+            PMIX_DSTORE_MEM_INFO_EXPORT("NS_META_SEGMENT", size);
             break;
         case NS_DATA_SEGMENT:
             size = _data_segment_size;
             snprintf(file_name, PMIX_PATH_MAX, "%s/smdataseg-%s-%d",
                 _ESH_SESSION_path(ns_map->tbl_idx), ns_map->name, id);
+
+            PMIX_DSTORE_MEM_INFO_EXPORT("NS_DATA_SEGMENT", size);
             break;
         default:
             PMIX_ERROR_LOG(PMIX_ERROR);
@@ -2247,6 +2266,28 @@ static void dstore_finalize(void)
 
     PMIX_OUTPUT_VERBOSE((10, pmix_gds_base_framework.framework_output,
                          "%s:%d:%s", __FILE__, __LINE__, __func__));
+
+    size_t total_size = 0;
+    char *env_val = getenv("PMIX_DSTORE_MEM_INFO_INITIAL_SEGMENT");
+    if (env_val) {
+        PMIX_OUTPUT((pmix_gds_base_framework.framework_verbose,
+                             "INITIAL_SEGMENT %s", env_val));
+        total_size += atoi(env_val);
+    }
+    env_val = getenv("PMIX_DSTORE_MEM_INFO_NS_META_SEGMENT");
+    if (env_val) {
+        PMIX_OUTPUT((pmix_gds_base_framework.framework_verbose,
+                             "META_SEGMENT %s", env_val));
+        total_size += atoi(env_val);
+    }
+    env_val = getenv("PMIX_DSTORE_MEM_INFO_NS_DATA_SEGMENT");
+    if (env_val) {
+        PMIX_OUTPUT((pmix_gds_base_framework.framework_verbose,
+                             "NS_DATA_SEGMENT %s", env_val));
+        total_size += atoi(env_val);
+        PMIX_OUTPUT((pmix_gds_base_framework.framework_verbose,
+                             "total segments size: %lu", total_size));
+    }
 
     _esh_sessions_cleanup();
     _esh_ns_map_cleanup();
