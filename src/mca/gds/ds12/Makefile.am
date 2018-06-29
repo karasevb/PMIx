@@ -24,11 +24,19 @@
 #
 
 headers = \
-        gds_dstore.h
+        ../ds_common/gds_dstore_common.h \
+        gds_dstore_v12.h
+#       nspace_info.h \
+#       session.h
+#        pthread_lock_v12.h
 
 sources = \
-        gds_dstore.c \
-        gds_dstore_component.c
+        ../ds_common/gds_dstore_common.c \
+        gds_dstore_v12.c \
+        gds_dstore_v12_component.c
+#        nspace_info.c \
+#        session.c
+#        pthread_lock_v12.c
 
 # Make the output library in this directory, and name it either
 # mca_<type>_<name>.la (for DSO builds) or libmca_<type>_<name>.la
