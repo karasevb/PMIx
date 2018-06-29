@@ -25,7 +25,9 @@
 
 headers = \
         ../ds_common/gds_dstore_common.h \
-        gds_dstore_v12.h
+        gds_dstore_v12.h \
+        ../ds_common/dstore_seg.h
+#        ../ds_common/session.h
 #       nspace_info.h \
 #       session.h
 #        pthread_lock_v12.h
@@ -33,7 +35,9 @@ headers = \
 sources = \
         ../ds_common/gds_dstore_common.c \
         gds_dstore_v12.c \
-        gds_dstore_v12_component.c
+        gds_dstore_v12_component.c \
+        ../ds_common/dstore_seg.c
+#        ../ds_common/session.c
 #        nspace_info.c \
 #        session.c
 #        pthread_lock_v12.c
