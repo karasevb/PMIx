@@ -1,14 +1,22 @@
-#ifndef DSTORE_LOCK_H
-#define DSTORE_LOCK_H
+#ifndef DSTORE_LOCK_PTHREAD_H
+#define DSTORE_LOCK_PTHREAD_H
+
+#include <pthread.h>
 
 #include <src/include/pmix_config.h>
 #include <pmix_common.h>
 
 #include "src/mca/pshmem/pshmem.h"
 
+int pmix_ds_lock_init(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock, char *lockfile, char setjobuid, uid_t jobuid);
+void pmix_ds_lock_fini(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock);
+pmix_status_t pmix_ds_lock_wr_acq(pthread_rwlock_t *rwlock);
+pmix_status_t pmix_ds_lock_rd_acq(pthread_rwlock_t *rwlock);
+pmix_status_t pmix_ds_lock_rw_rel(pthread_rwlock_t *rwlock);
+
 /* initialize the module */
 typedef pmix_status_t (*pmix_ds_lock_init_fn_t)(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock,
-                                                char *lockfile, uid_t jobuid);
+                                                char *lockfile, char setjobuid, uid_t jobuid);
 /* finalize the module */
 typedef void (*pmix_ds_lock_fini_fn_t)(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock);
 
@@ -30,12 +38,6 @@ typedef struct {
     pmix_ds_lock_rd_rel_fn_t rd_unlock;
 } pmix_ds_lock_module_t;
 
-int pmix_ds_lock_init(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock, char *lockfile, uid_t jobuid);
-void pmix_ds_lock_fini(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock);
-pmix_status_t pmix_ds_lock_wr_acq(pthread_rwlock_t *rwlock);
-pmix_status_t pmix_ds_lock_rd_acq(pthread_rwlock_t *rwlock);
-pmix_status_t pmix_ds_lock_rw_rel(pthread_rwlock_t *rwlock);
-
 extern pmix_ds_lock_module_t ds_lock;
 
-#endif // DSTORE_LOCK_H
+#endif // DSTORE_LOCK_PTHREAD_H

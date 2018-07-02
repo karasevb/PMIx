@@ -14,7 +14,7 @@
 
 #include <src/include/pmix_config.h>
 #include "dstore_seg.h"
-
+#include "dstore_lock.h"
 
 #include "src/mca/gds/gds.h"
 #include "src/mca/pshmem/pshmem.h"
@@ -29,14 +29,6 @@ BEGIN_C_DECLS
 #define NS_DATA_SEG_SIZE (1<<22)
 
 #define PMIX_DSTORE_ESH_BASE_PATH "PMIX_DSTORE_ESH_BASE_PATH"
-
-#ifdef HAVE_PTHREAD_SHARED
-#define ESH_PTHREAD_LOCK
-#elif defined HAVE_FCNTL_FLOCK
-#define ESH_FCNTL_LOCK
-#else
-#error No locking mechanism was found
-#endif
 
 typedef struct session_s session_t;
 
