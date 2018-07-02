@@ -39,7 +39,8 @@ __pmix_attribute_extension__ ({                             \
 #define _ESH_RDLOCK(rwlock) _ESH_LOCK(rwlock, rdlock)
 #define _ESH_UNLOCK(rwlock) _ESH_LOCK(rwlock, unlock)
 
-int pmix_ds_lock_init(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock, char *lockfile, uid_t jobuid) {
+int pmix_ds_lock_init(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock, char *lockfile,
+                      char setjobuid, uid_t jobuid) {
     pmix_status_t rc = PMIX_SUCCESS;
     size_t size = _lock_segment_size;
     pthread_rwlockattr_t attr;
@@ -58,7 +59,7 @@ int pmix_ds_lock_init(pmix_pshmem_seg_t **rwlock_seg, pthread_rwlock_t **rwlock,
             return rc;
         }
         memset((*rwlock_seg)->seg_base_addr, 0, size);
-        if (jobuid > 0) {
+        if (setjobuid > 0) {
             if (0 > chown(lockfile, (uid_t) jobuid, (gid_t) -1)){
                 rc = PMIX_ERROR;
                 PMIX_ERROR_LOG(rc);

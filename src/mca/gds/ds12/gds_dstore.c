@@ -50,15 +50,20 @@
 #include "src/mca/preg/preg.h"
 
 #include "src/mca/gds/base/base.h"
-#include "gds_dstore.h"
 #include "src/mca/pshmem/base/base.h"
 
+#include "dstore_lock.h"
+#include "gds_dstore.h"
 #include "dstore_nspace.h"
 #include "dstore_seg.h"
+
 #ifdef ESH_PTHREAD_LOCK
 #include "dstore_lock_pthread.h"
 #endif
-// TODO fcntl lock
+#ifdef ESH_FCNTL_LOCK
+#include "dstore_lock_fcntl.h"
+#endif
+#include "dstore_lock_pthread.h"
 
 #define ESH_REGION_EXTENSION        "EXTENSION_SLOT"
 #define ESH_REGION_INVALIDATED      "INVALIDATED"
@@ -887,7 +892,8 @@ static inline int _esh_session_init(size_t idx, ns_map_data_t *m, size_t jobuid,
         PMIX_ERROR_LOG(rc);
         return rc;
     }
-    if ( PMIX_SUCCESS != (rc = ds_lock.init(&s->rwlock_seg, &s->rwlock, s->lockfile, s->jobuid))) {
+    if ( PMIX_SUCCESS != (rc = ds_lock.init(&s->rwlock_seg, &s->rwlock, s->lockfile,
+                                            s->setjobuid, s->jobuid))) {
         PMIX_ERROR_LOG(rc);
         return rc;
     }
@@ -1701,10 +1707,6 @@ static pmix_status_t dstore_init(pmix_info_t info[], size_t ninfo)
     _jobuid = getuid();
     _setjobuid = 0;
 
-#ifdef ESH_FCNTL_LOCK
-    _esh_lock_init = _flock_init;
-#endif
-
     if (PMIX_SUCCESS != (rc = _esh_tbls_init())) {
         PMIX_ERROR_LOG(rc);
         goto err_exit;
@@ -2075,7 +2077,7 @@ static pmix_status_t _dstore_fetch(const char *nspace, pmix_rank_t rank,
     }
 
     /* grab shared lock */
-    if (PMIX_SUCCESS != (rc = ds_lock.rd_lock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (lock_rc = ds_lock.rd_lock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
         /* Something wrong with the lock. The error is fatal */
         rc = PMIX_ERR_FATAL;
         PMIX_ERROR_LOG(lock_rc);
