@@ -25,12 +25,14 @@
 
 headers = \
         gds_dstore.h \
-        dstore_seg.h
+        dstore_seg.h \
+        dstore_lock_pthread.h
 
 sources = \
         gds_dstore.c \
         gds_dstore_component.c \
-        dstore_seg.c
+        dstore_seg.c \
+        dstore_lock_pthread.c
 
 # Make the output library in this directory, and name it either
 # mca_<type>_<name>.la (for DSO builds) or libmca_<type>_<name>.la

@@ -53,6 +53,10 @@
 
 #include "dstore_nspace.h"
 #include "dstore_seg.h"
+#ifdef ESH_PTHREAD_LOCK
+#include "dstore_lock_pthread.h"
+#endif
+// TODO fcntl lock
 
 #define ESH_REGION_EXTENSION        "EXTENSION_SLOT"
 #define ESH_REGION_INVALIDATED      "INVALIDATED"
@@ -278,34 +282,6 @@ __extension__ ({                                            \
     memcpy(addr + ESH_KNAME_LEN_V12(key) + sizeof(size_t),  \
             buffer, size);                                  \
 })
-
-#ifdef ESH_PTHREAD_LOCK
-#define _ESH_LOCK(rwlock, func)                             \
-__extension__ ({                                            \
-    pmix_status_t ret = PMIX_SUCCESS;                       \
-    int rc;                                                 \
-    rc = pthread_rwlock_##func(rwlock);                     \
-    if (0 != rc) {                                          \
-        switch (errno) {                                    \
-            case EINVAL:                                    \
-                ret = PMIX_ERR_INIT;                        \
-                break;                                      \
-            case EPERM:                                     \
-                ret = PMIX_ERR_NO_PERMISSIONS;              \
-                break;                                      \
-        }                                                   \
-    }                                                       \
-    if (ret) {                                              \
-        pmix_output(0, "%s %d:%s lock failed: %s",          \
-            __FILE__, __LINE__, __func__, strerror(errno)); \
-    }                                                       \
-    ret;                                                    \
-})
-
-#define _ESH_WRLOCK(rwlock) _ESH_LOCK(rwlock, wrlock)
-#define _ESH_RDLOCK(rwlock) _ESH_LOCK(rwlock, rdlock)
-#define _ESH_UNLOCK(rwlock) _ESH_LOCK(rwlock, unlock)
-#endif
 
 #ifdef ESH_FCNTL_LOCK
 #define _ESH_LOCK(lockfd, operation)                        \
@@ -540,106 +516,6 @@ static inline int _flock_init(size_t idx) {
         }
     }
     return rc;
-}
-#endif
-
-#ifdef ESH_PTHREAD_LOCK
-static inline int _rwlock_init(size_t idx) {
-    pmix_status_t rc = PMIX_SUCCESS;
-    size_t size = _lock_segment_size;
-    pthread_rwlockattr_t attr;
-
-    if ((NULL != _ESH_SESSION_pthread_seg(idx)) || (NULL != _ESH_SESSION_pthread_rwlock(idx))) {
-        rc = PMIX_ERR_INIT;
-        return rc;
-    }
-    _ESH_SESSION_pthread_seg(idx) = (pmix_pshmem_seg_t *)malloc(sizeof(pmix_pshmem_seg_t));
-    if (NULL == _ESH_SESSION_pthread_seg(idx)) {
-        rc = PMIX_ERR_OUT_OF_RESOURCE;
-        return rc;
-    }
-    if (PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-        if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_create(_ESH_SESSION_pthread_seg(idx), _ESH_SESSION_lockfile(idx), size))) {
-            return rc;
-        }
-        memset(_ESH_SESSION_pthread_seg(idx)->seg_base_addr, 0, size);
-        if (_ESH_SESSION_setjobuid(idx) > 0) {
-            if (0 > chown(_ESH_SESSION_lockfile(idx), (uid_t) _ESH_SESSION_jobuid(idx), (gid_t) -1)){
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-            /* set the mode as required */
-            if (0 > chmod(_ESH_SESSION_lockfile(idx), S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP )) {
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-        }
-        _ESH_SESSION_pthread_rwlock(idx) = (pthread_rwlock_t *)_ESH_SESSION_pthread_seg(idx)->seg_base_addr;
-
-        if (0 != pthread_rwlockattr_init(&attr)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(idx));
-            return rc;
-        }
-        if (0 != pthread_rwlockattr_setpshared(&attr, PTHREAD_PROCESS_SHARED)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(idx));
-            pthread_rwlockattr_destroy(&attr);
-            return rc;
-        }
-#ifdef HAVE_PTHREAD_SETKIND
-        if (0 != pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(idx));
-            pthread_rwlockattr_destroy(&attr);
-            return rc;
-        }
-#endif
-        if (0 != pthread_rwlock_init(_ESH_SESSION_pthread_rwlock(idx), &attr)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(idx));
-            pthread_rwlockattr_destroy(&attr);
-            return rc;
-        }
-        if (0 != pthread_rwlockattr_destroy(&attr)) {
-            rc = PMIX_ERR_INIT;
-            return rc;
-        }
-
-    }
-    else {
-        _ESH_SESSION_pthread_seg(idx)->seg_size = size;
-        snprintf(_ESH_SESSION_pthread_seg(idx)->seg_name, PMIX_PATH_MAX, "%s", _ESH_SESSION_lockfile(idx));
-        if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_attach(_ESH_SESSION_pthread_seg(idx), PMIX_PSHMEM_RW))) {
-            return rc;
-        }
-        _ESH_SESSION_pthread_rwlock(idx) = (pthread_rwlock_t *)_ESH_SESSION_pthread_seg(idx)->seg_base_addr;
-    }
-
-    return rc;
-}
-
-static inline void _rwlock_release(size_t idx) {
-    pmix_status_t rc;
-
-
-    if (0 != pthread_rwlock_destroy(_ESH_SESSION_pthread_rwlock(idx))) {
-        rc = PMIX_ERROR;
-        PMIX_ERROR_LOG(rc);
-        return;
-    }
-
-    /* detach & unlink from current desc */
-    if (_ESH_SESSION_pthread_seg(idx)->seg_cpid == getpid()) {
-        pmix_pshmem.segment_unlink(_ESH_SESSION_pthread_seg(idx));
-    }
-    pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(idx));
-
-    free(_ESH_SESSION_pthread_seg(idx));
-    _ESH_SESSION_pthread_seg(idx) = NULL;
-    _ESH_SESSION_pthread_rwlock(idx) = NULL;
 }
 #endif
 
@@ -1004,12 +880,12 @@ static inline int _esh_session_init(size_t idx, ns_map_data_t *m, size_t jobuid,
         }
     }
 
-    if (NULL == _esh_lock_init) {
+    if (NULL == ds_lock.init) {
         rc = PMIX_ERR_INIT;
         PMIX_ERROR_LOG(rc);
         return rc;
     }
-    if ( PMIX_SUCCESS != (rc = _esh_lock_init(m->tbl_idx))) {
+    if ( PMIX_SUCCESS != (rc = ds_lock.init(&s->rwlock_seg, &s->rwlock, s->lockfile, s->jobuid))) {
         PMIX_ERROR_LOG(rc);
         return rc;
     }
@@ -1044,9 +920,9 @@ static inline void _esh_session_release(size_t tbl_idx)
         }
         free(_ESH_SESSION_path(tbl_idx));
     }
-#ifdef ESH_PTHREAD_LOCK
-    _rwlock_release(tbl_idx);
-#endif
+    if (NULL != ds_lock.fini) {
+        ds_lock.fini(&_ESH_SESSION_pthread_seg(tbl_idx), &_ESH_SESSION_lock(tbl_idx));
+    }
     memset(pmix_value_array_get_item(_session_array, tbl_idx), 0, sizeof(session_t));
 }
 
@@ -1823,9 +1699,6 @@ static pmix_status_t dstore_init(pmix_info_t info[], size_t ninfo)
     _jobuid = getuid();
     _setjobuid = 0;
 
-#ifdef ESH_PTHREAD_LOCK
-    _esh_lock_init = _rwlock_init;
-#endif
 #ifdef ESH_FCNTL_LOCK
     _esh_lock_init = _flock_init;
 #endif
@@ -2019,7 +1892,7 @@ static pmix_status_t _dstore_store(const char *nspace,
     }
 
     /* set exclusive lock */
-    if (PMIX_SUCCESS != (rc = _ESH_WRLOCK(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (rc = ds_lock.wr_lock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
         PMIX_ERROR_LOG(rc);
         return rc;
     }
@@ -2084,14 +1957,14 @@ static pmix_status_t _dstore_store(const char *nspace,
     }
 
     /* unset lock */
-    if (PMIX_SUCCESS != (rc = _ESH_UNLOCK(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (rc = ds_lock.wr_unlock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
         PMIX_ERROR_LOG(rc);
     }
     return rc;
 
 err_exit:
     /* unset lock */
-    if (PMIX_SUCCESS != (tmp_rc = _ESH_UNLOCK(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (tmp_rc = ds_lock.wr_unlock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
         PMIX_ERROR_LOG(tmp_rc);
     }
     return rc;
@@ -2196,7 +2069,7 @@ static pmix_status_t _dstore_fetch(const char *nspace, pmix_rank_t rank,
     }
 
     /* grab shared lock */
-    if (PMIX_SUCCESS != (lock_rc = _ESH_RDLOCK(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (rc = ds_lock.rd_lock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
         /* Something wrong with the lock. The error is fatal */
         rc = PMIX_ERR_FATAL;
         PMIX_ERROR_LOG(lock_rc);
@@ -2413,7 +2286,7 @@ static pmix_status_t _dstore_fetch(const char *nspace, pmix_rank_t rank,
 
 done:
     /* unset lock */
-    if (PMIX_SUCCESS != (lock_rc = _ESH_UNLOCK(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (lock_rc = ds_lock.rd_unlock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
         PMIX_ERROR_LOG(lock_rc);
     }
 
