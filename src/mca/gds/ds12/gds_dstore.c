@@ -54,14 +54,7 @@
 #include "gds_dstore.h"
 #include "dstore_nspace.h"
 #include "dstore_seg.h"
-
-#ifdef ESH_PTHREAD_LOCK
-#include "dstore_lock_pthread.h"
-#endif
-#ifdef ESH_FCNTL_LOCK
-#include "dstore_lock_fcntl.h"
-#endif
-#include "dstore_lock_pthread.h"
+#include "dstore_session.h"
 
 #define ESH_REGION_EXTENSION        "EXTENSION_SLOT"
 #define ESH_REGION_INVALIDATED      "INVALIDATED"
@@ -288,50 +281,6 @@ __extension__ ({                                            \
             buffer, size);                                  \
 })
 
-#ifdef ESH_FCNTL_LOCK
-#define _ESH_LOCK(lockfd, operation)                        \
-__extension__ ({                                            \
-    pmix_status_t ret = PMIX_SUCCESS;                       \
-    int i;                                                  \
-    struct flock fl = {0};                                  \
-    fl.l_type = operation;                                  \
-    fl.l_whence = SEEK_SET;                                 \
-    for(i = 0; i < 10; i++) {                               \
-        if( 0 > fcntl(lockfd, F_SETLKW, &fl) ) {            \
-            switch( errno ){                                \
-                case EINTR:                                 \
-                    continue;                               \
-                case ENOENT:                                \
-                case EINVAL:                                \
-                    ret = PMIX_ERR_NOT_FOUND;               \
-                    break;                                  \
-                case EBADF:                                 \
-                    ret = PMIX_ERR_BAD_PARAM;               \
-                    break;                                  \
-                case EDEADLK:                               \
-                case EFAULT:                                \
-                case ENOLCK:                                \
-                    ret = PMIX_ERR_RESOURCE_BUSY;           \
-                    break;                                  \
-                default:                                    \
-                    ret = PMIX_ERROR;                       \
-                    break;                                  \
-            }                                               \
-        }                                                   \
-        break;                                              \
-    }                                                       \
-    if (ret) {                                              \
-        pmix_output(0, "%s %d:%s lock failed: %s",          \
-            __FILE__, __LINE__, __func__, strerror(errno)); \
-    }                                                       \
-    ret;                                                    \
-})
-
-#define _ESH_WRLOCK(lock) _ESH_LOCK(lock, F_WRLCK)
-#define _ESH_RDLOCK(lock) _ESH_LOCK(lock, F_RDLCK)
-#define _ESH_UNLOCK(lock) _ESH_LOCK(lock, F_UNLCK)
-#endif
-
 #define ESH_INIT_SESSION_TBL_SIZE 2
 #define ESH_INIT_NS_MAP_TBL_SIZE  2
 
@@ -340,7 +289,6 @@ static int _update_ns_elem(ns_track_elem_t *ns_elem, ns_seg_info_t *info);
 static ns_track_elem_t *_get_track_elem_for_namespace(ns_map_data_t *ns_map);
 static rank_meta_info *_get_rank_meta_info(pmix_rank_t rank, seg_desc_t *segdesc);
 static uint8_t *_get_data_region_by_offset(seg_desc_t *segdesc, size_t offset);
-static void _delete_sm_desc(seg_desc_t *desc);
 static inline ssize_t _get_univ_size(const char *nspace);
 
 static inline ns_map_data_t * _esh_session_map_search_server(const char *nspace);
@@ -427,34 +375,10 @@ static uid_t _jobuid;
 static char _setjobuid = 0;
 static pmix_peer_t *_clients_peer = NULL;
 
-static pmix_value_array_t *_session_array = NULL;
 static pmix_value_array_t *_ns_map_array = NULL;
 static pmix_value_array_t *_ns_track_array = NULL;
 
 ns_map_data_t * (*_esh_session_map_search)(const char *nspace) = NULL;
-int (*_esh_lock_init)(size_t idx) = NULL;
-
-#define _ESH_SESSION_path(tbl_idx)         (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].nspace_path)
-#define _ESH_SESSION_lockfile(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lockfile)
-#define _ESH_SESSION_setjobuid(tbl_idx)    (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].setjobuid)
-#define _ESH_SESSION_jobuid(tbl_idx)       (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].jobuid)
-#define _ESH_SESSION_sm_seg_first(tbl_idx) (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].sm_seg_first)
-#define _ESH_SESSION_sm_seg_last(tbl_idx)  (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].sm_seg_last)
-#define _ESH_SESSION_ns_info(tbl_idx)      (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].ns_info)
-#define _ESH_SESSION_in_use(tbl_idx)       (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].in_use)
-
-#ifdef ESH_PTHREAD_LOCK
-#define _ESH_SESSION_pthread_rwlock(tbl_idx) (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].rwlock)
-#define _ESH_SESSION_pthread_seg(tbl_idx)   (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].rwlock_seg)
-#define _ESH_SESSION_lock(tbl_idx)         _ESH_SESSION_pthread_rwlock(tbl_idx)
-#endif
-
-#ifdef ESH_FCNTL_LOCK
-#define _ESH_SESSION_lock(tbl_idx)         _ESH_SESSION_lockfd(tbl_idx)
-#endif
-
-#define _ESH_SESSION_lockfd(tbl_idx)       (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lockfd)
-#define _ESH_SESSION_lockfile(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lockfile)
 
 static void ncon(ns_track_elem_t *p) {
     memset(&p->ns_map, 0, sizeof(p->ns_map));
@@ -480,49 +404,6 @@ static inline void _esh_session_map_clean(ns_map_t *m) {
     memset(m, 0, sizeof(*m));
     m->data.track_idx = -1;
 }
-
-#ifdef ESH_FCNTL_LOCK
-static inline int _flock_init(size_t idx) {
-    pmix_status_t rc = PMIX_SUCCESS;
-
-    if (PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-        _ESH_SESSION_lock(idx) = open(_ESH_SESSION_lockfile(idx), O_CREAT | O_RDWR | O_EXCL, 0600);
-
-        /* if previous launch was crashed, the lockfile might not be deleted and unlocked,
-         * so we delete it and create a new one. */
-        if (_ESH_SESSION_lock(idx) < 0) {
-            unlink(_ESH_SESSION_lockfile(idx));
-            _ESH_SESSION_lock(idx) = open(_ESH_SESSION_lockfile(idx), O_CREAT | O_RDWR, 0600);
-            if (_ESH_SESSION_lock(idx) < 0) {
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-        }
-        if (_ESH_SESSION_setjobuid(idx) > 0) {
-            if (0 > chown(_ESH_SESSION_lockfile(idx), (uid_t) _ESH_SESSION_jobuid(idx), (gid_t) -1)) {
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-            if (0 > chmod(_ESH_SESSION_lockfile(idx), S_IRUSR | S_IWGRP | S_IRGRP)) {
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-        }
-    }
-    else {
-        _ESH_SESSION_lock(idx) = open(_ESH_SESSION_lockfile(idx), O_RDONLY);
-        if (-1 == _ESH_SESSION_lock(idx)) {
-            rc = PMIX_ERROR;
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-    }
-    return rc;
-}
-#endif
 
 static inline int _esh_dir_del(const char *path)
 {
@@ -930,23 +811,6 @@ static inline void _esh_session_release(size_t tbl_idx)
         ds_lock.fini(&_ESH_SESSION_pthread_seg(tbl_idx), &_ESH_SESSION_lock(tbl_idx));
     }
     memset(pmix_value_array_get_item(_session_array, tbl_idx), 0, sizeof(session_t));
-}
-
-static void _delete_sm_desc(seg_desc_t *desc)
-{
-    seg_desc_t *tmp;
-
-    /* free all global segments */
-    while (NULL != desc) {
-        tmp = desc->next;
-        /* detach & unlink from current desc */
-        if (desc->seg_info.seg_cpid == getpid()) {
-            pmix_pshmem.segment_unlink(&desc->seg_info);
-        }
-        pmix_pshmem.segment_detach(&desc->seg_info);
-        free(desc);
-        desc = tmp;
-    }
 }
 
 /* This function synchronizes the content of initial shared segment and the local track list. */

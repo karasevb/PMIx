@@ -70,5 +70,6 @@ ns_seg_info_t *_get_ns_info_from_initial_segment(seg_desc_t *seg_desc_first,
                                                  const char *name);
 seg_desc_t *extend_segment(seg_desc_t *segdesc, const char *name,
                            const char *path, char setjobuid);
+void _delete_sm_desc(seg_desc_t *desc);
 
 #endif // DSTORE_SEG_H
