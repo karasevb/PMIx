@@ -322,3 +322,20 @@ seg_desc_t *extend_segment(seg_desc_t *segdesc, const char *name,
 
     return seg;
 }
+
+void _delete_sm_desc(seg_desc_t *desc)
+{
+    seg_desc_t *tmp;
+
+    /* free all global segments */
+    while (NULL != desc) {
+        tmp = desc->next;
+        /* detach & unlink from current desc */
+        if (desc->seg_info.seg_cpid == getpid()) {
+            pmix_pshmem.segment_unlink(&desc->seg_info);
+        }
+        pmix_pshmem.segment_detach(&desc->seg_info);
+        free(desc);
+        desc = tmp;
+    }
+}

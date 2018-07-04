@@ -27,12 +27,14 @@ headers = \
         gds_dstore.h \
         dstore_seg.h \
         dstore_lock.h \
+        dstore_session.h \
         dstore_lock_pthread.h
 #        dstore_lock_fcntl.h
 sources = \
         gds_dstore.c \
         gds_dstore_component.c \
         dstore_seg.c \
+        dstore_session.c \
         dstore_lock_pthread.c
 #        dstore_lock_fcntl.c \
 # Make the output library in this directory, and name it either

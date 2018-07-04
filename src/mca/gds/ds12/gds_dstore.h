@@ -30,23 +30,6 @@ BEGIN_C_DECLS
 
 #define PMIX_DSTORE_ESH_BASE_PATH "PMIX_DSTORE_ESH_BASE_PATH"
 
-typedef struct session_s session_t;
-
-struct session_s {
-    int in_use;
-    uid_t jobuid;
-    char setjobuid;
-    char *nspace_path;
-    char *lockfile;
-#ifdef ESH_PTHREAD_LOCK
-    pmix_pshmem_seg_t *rwlock_seg;
-    pthread_rwlock_t *rwlock;
-#endif
-    int lockfd;
-    seg_desc_t *sm_seg_first;
-    seg_desc_t *sm_seg_last;
-};
-
 typedef struct {
     pmix_value_array_t super;
     ns_map_data_t ns_map;
