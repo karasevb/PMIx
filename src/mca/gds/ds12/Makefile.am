@@ -26,17 +26,25 @@
 headers = \
         gds_dstore.h \
         dstore_seg.h \
-        dstore_lock.h \
         dstore_session.h \
-        dstore_lock_pthread.h
-#        dstore_lock_fcntl.h
+        dstore_lock.h
+
 sources = \
         gds_dstore.c \
         gds_dstore_component.c \
         dstore_seg.c \
-        dstore_session.c \
-        dstore_lock_pthread.c
-#        dstore_lock_fcntl.c \
+        dstore_session.c
+
+if DSTORE_PTHREAD_LOCK
+headers += dstore_lock_pthread.h
+sources += dstore_lock_pthread.c
+else
+if DSTORE_FCNTL_LOCK
+headers += dstore_lock_fcntl.h
+sources += dstore_lock_fcntl.c
+endif
+endif
+
 # Make the output library in this directory, and name it either
 # mca_<type>_<name>.la (for DSO builds) or libmca_<type>_<name>.la
 # (for static builds).

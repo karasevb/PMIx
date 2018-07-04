@@ -767,14 +767,7 @@ static inline int _esh_session_init(size_t idx, ns_map_data_t *m, size_t jobuid,
             return rc;
         }
     }
-
-    if (NULL == ds_lock.init) {
-        rc = PMIX_ERR_INIT;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-    if ( PMIX_SUCCESS != (rc = ds_lock.init(&s->rwlock_seg, &s->rwlock, s->lockfile,
-                                            s->setjobuid, s->jobuid))) {
+    if (PMIX_SUCCESS != (rc = _ESH_LOCK_INIT(idx))) {
         PMIX_ERROR_LOG(rc);
         return rc;
     }
@@ -809,9 +802,7 @@ static inline void _esh_session_release(size_t tbl_idx)
         }
         free(_ESH_SESSION_path(tbl_idx));
     }
-    if (NULL != ds_lock.fini) {
-        ds_lock.fini(&_ESH_SESSION_pthread_seg(tbl_idx), &_ESH_SESSION_lock(tbl_idx));
-    }
+    _ESH_LOCK_FINI(tbl_idx);
     memset(pmix_value_array_get_item(_session_array, tbl_idx), 0, sizeof(session_t));
 }
 
@@ -1764,7 +1755,7 @@ static pmix_status_t _dstore_store(const char *nspace,
     }
 
     /* set exclusive lock */
-    if (PMIX_SUCCESS != (rc = ds_lock.wr_lock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (rc = _ESH_WR_LOCK(ns_map->tbl_idx))) {
         PMIX_ERROR_LOG(rc);
         return rc;
     }
@@ -1829,14 +1820,14 @@ static pmix_status_t _dstore_store(const char *nspace,
     }
 
     /* unset lock */
-    if (PMIX_SUCCESS != (rc = ds_lock.wr_unlock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (rc = _ESH_WR_UNLOCK(ns_map->tbl_idx))) {
         PMIX_ERROR_LOG(rc);
     }
     return rc;
 
 err_exit:
     /* unset lock */
-    if (PMIX_SUCCESS != (tmp_rc = ds_lock.wr_unlock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (tmp_rc = _ESH_WR_UNLOCK(ns_map->tbl_idx))) {
         PMIX_ERROR_LOG(tmp_rc);
     }
     return rc;
@@ -1941,7 +1932,7 @@ static pmix_status_t _dstore_fetch(const char *nspace, pmix_rank_t rank,
     }
 
     /* grab shared lock */
-    if (PMIX_SUCCESS != (lock_rc = ds_lock.rd_lock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (lock_rc = _ESH_RD_LOCK(ns_map->tbl_idx))) {
         /* Something wrong with the lock. The error is fatal */
         rc = PMIX_ERR_FATAL;
         PMIX_ERROR_LOG(lock_rc);
@@ -2158,7 +2149,7 @@ static pmix_status_t _dstore_fetch(const char *nspace, pmix_rank_t rank,
 
 done:
     /* unset lock */
-    if (PMIX_SUCCESS != (lock_rc = ds_lock.rd_unlock(_ESH_SESSION_lock(ns_map->tbl_idx)))) {
+    if (PMIX_SUCCESS != (lock_rc = _ESH_RD_UNLOCK(ns_map->tbl_idx))) {
         PMIX_ERROR_LOG(lock_rc);
     }
 
