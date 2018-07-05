@@ -1,5 +1,17 @@
-#ifndef DSTORE_LOCK_PTHREAD_H
-#define DSTORE_LOCK_PTHREAD_H
+/*
+ * Copyright (c) 2015-2017 Intel, Inc. All rights reserved.
+ * Copyright (c) 2017-2018 Mellanox Technologies, Inc.
+ *                         All rights reserved.
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
+
+#ifndef DS21_LOCK_PTHREAD_H
+#define DS21_LOCK_PTHREAD_H
 
 #include <pthread.h>
 
@@ -8,7 +20,7 @@
 
 #include "src/mca/pshmem/pshmem.h"
 
-#define _ESH_12_PTHREAD_LOCK(rwlock, func)                             \
+#define _ESH_21_PTHREAD_LOCK(rwlock, func)                  \
 __pmix_attribute_extension__ ({                             \
     pmix_status_t ret = PMIX_SUCCESS;                       \
     int rc;                                                 \
@@ -30,11 +42,13 @@ __pmix_attribute_extension__ ({                             \
     ret;                                                    \
 })
 
-#define _DS_WRLOCK(rwlock) _ESH_12_PTHREAD_LOCK(rwlock, wrlock)
-#define _DS_RDLOCK(rwlock) _ESH_12_PTHREAD_LOCK(rwlock, rdlock)
-#define _DS_UNLOCK(rwlock) _ESH_12_PTHREAD_LOCK(rwlock, unlock)
+#define _DS_INIT(idx) pmix_ds21_lock_init(idx)
+#define _DS_FINI(idx) pmix_ds21_lock_finalize(idx)
+#define _DS_WRLOCK(rwlock) _ESH_21_PTHREAD_LOCK(rwlock, wrlock)
+#define _DS_RDLOCK(rwlock) _ESH_21_PTHREAD_LOCK(rwlock, rdlock)
+#define _DS_UNLOCK(rwlock) _ESH_21_PTHREAD_LOCK(rwlock, unlock)
 
-pmix_status_t pmix_ds12_lock_init(size_t session_idx);
-void pmix_ds12_lock_finalize(size_t session_idx);
+pmix_status_t pmix_ds21_lock_init(size_t session_idx);
+void pmix_ds21_lock_finalize(size_t session_idx);
 
 #endif // DSTORE_LOCK_PTHREAD_H

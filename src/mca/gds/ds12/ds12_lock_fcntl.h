@@ -1,15 +1,26 @@
-#ifndef DSTORE_LOCK_FCNTL_H
-#define DSTORE_LOCK_FCNTL_H
+/*
+ * Copyright (c) 2015-2017 Intel, Inc. All rights reserved.
+ * Copyright (c) 2017-2018 Mellanox Technologies, Inc.
+ *                         All rights reserved.
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
+#ifndef DS12_LOCK_FCNTL_H
+#define DS12_LOCK_FCNTL_H
 
 #include <fcntl.h>
 
 #include <src/include/pmix_config.h>
 #include <pmix_common.h>
 
-#include "dstore_lock.h"
+#include "src/mca/gds/ds_common/dstore_lock.h"
 
 
-#define _ESH_12_FCNTL_LOCK(lockfd, operation)                        \
+#define _ESH_12_FCNTL_LOCK(lockfd, operation)               \
 __pmix_attribute_extension__ ({                             \
     pmix_status_t ret = PMIX_SUCCESS;                       \
     int i;                                                  \
@@ -47,6 +58,8 @@ __pmix_attribute_extension__ ({                             \
     ret;                                                    \
 })
 
+#define _DS_INIT(idx) pmix_ds12_lock_init(idx)
+#define _DS_FINI(idx) pmix_ds12_lock_finalize(idx)
 #define _DS_WRLOCK(lock) _ESH_12_FCNTL_LOCK(lock, F_WRLCK)
 #define _DS_RDLOCK(lock) _ESH_12_FCNTL_LOCK(lock, F_RDLCK)
 #define _DS_UNLOCK(lock) _ESH_12_FCNTL_LOCK(lock, F_UNLCK)

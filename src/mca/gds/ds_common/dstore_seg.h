@@ -1,9 +1,24 @@
+/*
+ * Copyright (c) 2015-2018 Intel, Inc. All rights reserved.
+ * Copyright (c) 2016      IBM Corporation.  All rights reserved.
+ * Copyright (c) 2016-2018 Mellanox Technologies, Inc.
+ *                         All rights reserved.
+ * Copyright (c) 2018      Research Organization for Information Science
+ *                         and Technology (RIST).  All rights reserved.
+ *
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
 #ifndef DSTORE_SEG_H
 #define DSTORE_SEG_H
 
 #include <src/include/pmix_config.h>
 #include "src/mca/pshmem/pshmem.h"
-#include "dstore_nspace.h"
+#include "src/mca/gds/ds_common/dstore_nspace.h"
 
 /* this structs are used to store information about
  * shared segments addresses locally at each process,

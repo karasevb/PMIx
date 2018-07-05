@@ -31,9 +31,10 @@
 #include <src/include/pmix_config.h>
 #include "pmix_common.h"
 
-
+#include "src/include/pmix_globals.h"
 #include "src/mca/gds/gds.h"
 #include "gds_dstore.h"
+#include "src/mca/gds/ds_common/dstore_lock.h"
 #include "src/mca/gds/ds_common/gds_dstore.h"
 
 static pmix_status_t component_open(void);
@@ -44,12 +45,12 @@ static pmix_status_t component_query(pmix_mca_base_module_t **module, int *prior
  * Instantiate the public struct with all of our public information
  * and pointers to our public functions in it
  */
-pmix_gds_base_component_t mca_gds_ds12_component = {
+pmix_gds_base_component_t mca_gds_ds21_component = {
     .base = {
         PMIX_GDS_BASE_VERSION_1_0_0,
 
         /* Component name and version */
-        .pmix_mca_component_name = "ds12",
+        .pmix_mca_component_name = "ds21",
         PMIX_MCA_BASE_MAKE_VERSION(component,
                                    PMIX_MAJOR_VERSION,
                                    PMIX_MINOR_VERSION,
@@ -75,8 +76,15 @@ static int component_open(void)
 
 static int component_query(pmix_mca_base_module_t **module, int *priority)
 {
-    *priority = 20;
-    *module = (pmix_mca_base_module_t *)&pmix_ds12_module;
+    /* launchers cannot use the dstore */
+    if (PMIX_PROC_IS_LAUNCHER(pmix_globals.mypeer)) {
+        *priority = 0;
+        *module = NULL;
+        return PMIX_ERROR;
+    }
+
+    *priority = 30;
+    *module = (pmix_mca_base_module_t *)&pmix_ds21_module;
     return PMIX_SUCCESS;
 }
 

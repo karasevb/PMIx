@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2015-2018 Intel, Inc. All rights reserved.
+ * Copyright (c) 2016      IBM Corporation.  All rights reserved.
+ * Copyright (c) 2016-2018 Mellanox Technologies, Inc.
+ *                         All rights reserved.
+ * Copyright (c) 2018      Research Organization for Information Science
+ *                         and Technology (RIST).  All rights reserved.
+ *
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
 #include <stdio.h>
 #include <sys/stat.h>
 
@@ -14,8 +29,8 @@
 #include "src/util/error.h"
 #include "src/util/output.h"
 
-#include "dstore_seg.h"
-#include "dstore_nspace.h"
+#include "src/mca/gds/ds_common/dstore_seg.h"
+#include "src/mca/gds/ds_common/dstore_nspace.h"
 
 #define INITIAL_SEG_SIZE 4096
 #define NS_META_SEG_SIZE (1<<22)

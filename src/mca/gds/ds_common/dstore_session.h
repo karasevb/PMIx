@@ -1,11 +1,25 @@
+/*
+ * Copyright (c) 2015-2018 Intel, Inc. All rights reserved.
+ * Copyright (c) 2016      IBM Corporation.  All rights reserved.
+ * Copyright (c) 2016-2018 Mellanox Technologies, Inc.
+ *                         All rights reserved.
+ * Copyright (c) 2018      Research Organization for Information Science
+ *                         and Technology (RIST).  All rights reserved.
+ *
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
 #ifndef DSTORE_SESSION_H
 #define DSTORE_SESSION_H
  
 #include <pmix_common.h>
 #include <src/include/pmix_config.h>
 
-#include "dstore_lock.h"
-#include "dstore_seg.h"
+#include "src/mca/gds/ds_common/dstore_seg.h"
 
 typedef struct session_s session_t;
 
@@ -19,7 +33,7 @@ struct session_s {
     pmix_pshmem_seg_t *lock_seg;
     pthread_rwlock_t *lock;
 #endif
-#ifdef ESH_PTHREAD_LOCK_21
+#ifdef xESH_PTHREAD_LOCK_21
     pmix_pshmem_seg_t *lock_seg;
     pthread_mutex_t *lock;
     uint32_t num_locks, num_forked, num_procs;
@@ -46,7 +60,7 @@ struct session_s {
 #define _ESH_SESSION_pthread_seg(tbl_idx)   (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lock_seg)
 #define _ESH_SESSION_lock(tbl_idx)          _ESH_SESSION_pthread_rwlock(tbl_idx)
 #endif
-#ifdef ESH_PTHREAD_LOCK_21
+#ifdef xESH_PTHREAD_LOCK_21
 #define _ESH_SESSION_numlocks(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_locks)
 #define _ESH_SESSION_numprocs(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_procs)
 #define _ESH_SESSION_numforked(tbl_idx)    (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_fork)

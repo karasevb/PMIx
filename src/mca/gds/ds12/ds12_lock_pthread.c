@@ -1,3 +1,18 @@
+/*
+ * Copyright (c) 2015-2018 Intel, Inc. All rights reserved.
+ * Copyright (c) 2016      IBM Corporation.  All rights reserved.
+ * Copyright (c) 2016-2018 Mellanox Technologies, Inc.
+ *                         All rights reserved.
+ * Copyright (c) 2018      Research Organization for Information Science
+ *                         and Technology (RIST).  All rights reserved.
+ *
+ * $COPYRIGHT$
+ *
+ * Additional copyrights may follow
+ *
+ * $HEADER$
+ */
+
 #include <pthread.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -6,14 +21,16 @@
 #include <src/include/pmix_config.h>
 #include <pmix_common.h>
 
-#include "dstore_lock_pthread.h"
+#include "gds_dstore.h"
+#include "ds12_lock_pthread.h"
 #include "src/util/error.h"
 #include "src/util/output.h"
 #include "src/mca/pshmem/pshmem.h"
 #include "src/include/pmix_globals.h"
 
-#include "dstore_seg.h"
-#include "dstore_session.h"
+#include "src/mca/gds/ds_common/dstore_lock.h"
+#include "src/mca/gds/ds_common/dstore_seg.h"
+#include "src/mca/gds/ds_common/dstore_session.h"
 
 pmix_status_t pmix_ds12_lock_init(size_t session_idx)
 {
