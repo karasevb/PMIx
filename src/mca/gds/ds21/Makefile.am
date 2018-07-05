@@ -14,7 +14,7 @@
 # Copyright (c) 2013-2017 Intel, Inc. All rights reserved.
 # Copyright (c) 2017      Research Organization for Information Science
 #                         and Technology (RIST). All rights reserved.
-# Copyright (c) 2017      Mellanox Technologies, Inc.
+# Copyright (c) 2017-2018 Mellanox Technologies, Inc.
 #                         All rights reserved.
 # $COPYRIGHT$
 #
@@ -23,43 +23,38 @@
 # $HEADER$
 #
 
-AM_CPPFLAGS = -DESH_PTHREAD_LOCK_12 -DGDS_DS_NAME_STR=\"ds12\"
+AM_CPPFLAGS = -DESH_PTHREAD_LOCK_21 -DGDS_DS_NAME_STR=\"ds21\"
 
 headers = \
-        ../ds_common/gds_dstore.h \
         gds_dstore.h \
+        ../ds_common/gds_dstore.h \
         ../ds_common/dstore_seg.h \
         ../ds_common/dstore_session.h \
         ../ds_common/dstore_lock.h
 
 sources = \
-        ../ds_common/gds_dstore.c \
         gds_dstore.c \
         gds_dstore_component.c \
+        ../ds_common/gds_dstore.c \
         ../ds_common/dstore_seg.c \
         ../ds_common/dstore_session.c
 
 if DSTORE_PTHREAD_LOCK
-headers += ds12_lock_pthread.h
-sources += ds12_lock_pthread.c
-else
-if DSTORE_FCNTL_LOCK
-headers += ds12_lock_fcntl.h
-sources += ds12_lock_fcntl.c
-endif
+headers += ds21_lock_pthread.h
+sources += ds21_lock_pthread.c
 endif
 
 # Make the output library in this directory, and name it either
 # mca_<type>_<name>.la (for DSO builds) or libmca_<type>_<name>.la
 # (for static builds).
 
-if MCA_BUILD_pmix_gds_ds12_DSO
+if MCA_BUILD_pmix_gds_ds21_DSO
 lib =
 lib_sources =
-component = mca_gds_ds12.la
+component = mca_gds_ds21.la
 component_sources = $(headers) $(sources)
 else
-lib = libmca_gds_ds12.la
+lib = libmca_gds_ds21.la
 lib_sources = $(headers) $(sources)
 component =
 component_sources =
@@ -67,9 +62,9 @@ endif
 
 mcacomponentdir = $(pmixlibdir)
 mcacomponent_LTLIBRARIES = $(component)
-mca_gds_ds12_la_SOURCES = $(component_sources)
-mca_gds_ds12_la_LDFLAGS = -module -avoid-version
+mca_gds_ds21_la_SOURCES = $(component_sources)
+mca_gds_ds21_la_LDFLAGS = -module -avoid-version
 
 noinst_LTLIBRARIES = $(lib)
-libmca_gds_ds12_la_SOURCES = $(lib_sources)
-libmca_gds_ds12_la_LDFLAGS = -module -avoid-version
+libmca_gds_ds21_la_SOURCES = $(lib_sources)
+libmca_gds_ds21_la_LDFLAGS = -module -avoid-version
