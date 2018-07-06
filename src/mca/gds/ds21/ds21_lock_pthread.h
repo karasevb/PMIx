@@ -44,9 +44,10 @@ __pmix_attribute_extension__ ({                             \
 
 #define _DS_INIT(idx) pmix_ds21_lock_init(idx)
 #define _DS_FINI(idx) pmix_ds21_lock_finalize(idx)
-#define _DS_WRLOCK(rwlock) _ESH_21_PTHREAD_LOCK(rwlock, wrlock)
-#define _DS_RDLOCK(rwlock) _ESH_21_PTHREAD_LOCK(rwlock, rdlock)
-#define _DS_UNLOCK(rwlock) _ESH_21_PTHREAD_LOCK(rwlock, unlock)
+#define _DS_WR_LOCK(idx) _ESH_21_PTHREAD_LOCK(_ESH_SESSION_lock(idx), wrlock)
+#define _DS_RD_LOCK(idx) _ESH_21_PTHREAD_LOCK(_ESH_SESSION_lock(idx), rdlock)
+#define _DS_WR_UNLOCK(idx) _ESH_21_PTHREAD_LOCK(_ESH_SESSION_lock(idx), unlock)
+#define _DS_RD_UNLOCK(idx) _ESH_21_PTHREAD_LOCK(_ESH_SESSION_lock(idx), unlock)
 
 pmix_status_t pmix_ds21_lock_init(size_t session_idx);
 void pmix_ds21_lock_finalize(size_t session_idx);
