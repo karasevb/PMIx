@@ -325,7 +325,7 @@ pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
 pmix_status_t dstore_store_job_info(const char *nspace,
                                 pmix_buffer_t *job_data);
 
-static pmix_status_t _dstore_store(const char *nspace,
+static pmix_status_t _dstore_store_nolock(ns_map_data_t *ns_map,
                                     pmix_rank_t rank,
                                     pmix_kval_t *kv);
 
@@ -1711,15 +1711,14 @@ void dstore_finalize(void)
     }
 }
 
-static pmix_status_t _dstore_store(const char *nspace,
+static pmix_status_t _dstore_store_nolock(ns_map_data_t *ns_map,
                                     pmix_rank_t rank,
                                     pmix_kval_t *kv)
 {
-    pmix_status_t rc = PMIX_SUCCESS, tmp_rc;
+    pmix_status_t rc = PMIX_SUCCESS;
     ns_track_elem_t *elem;
     pmix_buffer_t xfer;
     ns_seg_info_t ns_info;
-    ns_map_data_t *ns_map = NULL;
 
     if (NULL == kv) {
         return PMIX_ERROR;
@@ -1727,19 +1726,7 @@ static pmix_status_t _dstore_store(const char *nspace,
 
     PMIX_OUTPUT_VERBOSE((10, pmix_gds_base_framework.framework_output,
                          "%s:%d:%s: for %s:%u",
-                         __FILE__, __LINE__, __func__, nspace, rank));
-
-    if (NULL == (ns_map = _esh_session_map_search(nspace))) {
-        rc = PMIX_ERROR;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-
-    /* set exclusive lock */
-    if (PMIX_SUCCESS != (rc = _ESH_WR_LOCK(ns_map->tbl_idx))) {
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
+                         __FILE__, __LINE__, __func__, ns_map->name, rank));
 
     /* First of all, we go through local track list (list of ns_track_elem_t structures)
      * and look for an element for the target namespace.
@@ -1755,7 +1742,7 @@ static pmix_status_t _dstore_store(const char *nspace,
     if (NULL == elem) {
         rc = PMIX_ERR_OUT_OF_RESOURCE;
         PMIX_ERROR_LOG(rc);
-        goto err_exit;
+        goto exit;
     }
 
     /* If a new element was just created, we need to create corresponding meta and
@@ -1769,7 +1756,7 @@ static pmix_status_t _dstore_store(const char *nspace,
         rc = _update_ns_elem(elem, &ns_info);
         if (PMIX_SUCCESS != rc || NULL == elem->meta_seg || NULL == elem->data_seg) {
             PMIX_ERROR_LOG(rc);
-            goto err_exit;
+            goto exit;
         }
 
         /* zero created shared memory segments for this namespace */
@@ -1782,7 +1769,7 @@ static pmix_status_t _dstore_store(const char *nspace,
                                              _ESH_SESSION_setjobuid(ns_map->tbl_idx));
         if (PMIX_SUCCESS != rc) {
             PMIX_ERROR_LOG(rc);
-            goto err_exit;
+            goto exit;
         }
     }
 
@@ -1797,20 +1784,10 @@ static pmix_status_t _dstore_store(const char *nspace,
 
     if (PMIX_SUCCESS != rc) {
         PMIX_ERROR_LOG(rc);
-        goto err_exit;
+        goto exit;
     }
 
-    /* unset lock */
-    if (PMIX_SUCCESS != (rc = _ESH_WR_UNLOCK(ns_map->tbl_idx))) {
-        PMIX_ERROR_LOG(rc);
-    }
-    return rc;
-
-err_exit:
-    /* unset lock */
-    if (PMIX_SUCCESS != (tmp_rc = _ESH_WR_UNLOCK(ns_map->tbl_idx))) {
-        PMIX_ERROR_LOG(tmp_rc);
-    }
+exit:
     return rc;
 }
 
@@ -1819,6 +1796,7 @@ pmix_status_t dstore_store(const pmix_proc_t *proc,
                                     pmix_kval_t *kv)
 {
     pmix_status_t rc = PMIX_SUCCESS;
+    ns_map_data_t *ns_map;
 
     pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
                         "[%s:%d] gds: dstore store for key '%s' scope %d",
@@ -1841,7 +1819,25 @@ pmix_status_t dstore_store(const pmix_proc_t *proc,
         PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &tmp, kv, 1, PMIX_KVAL);
         PMIX_UNLOAD_BUFFER(&tmp, kv2->value->data.bo.bytes, kv2->value->data.bo.size);
 
-        rc = _dstore_store(proc->nspace, proc->rank, kv2);
+        if (NULL == (ns_map = _esh_session_map_search(proc->nspace))) {
+            rc = PMIX_ERROR;
+            PMIX_ERROR_LOG(rc);
+            return rc;
+        }
+
+        /* set exclusive lock */
+        if (PMIX_SUCCESS != (rc = _ESH_WR_LOCK(ns_map->tbl_idx))) {
+            PMIX_ERROR_LOG(rc);
+            return rc;
+        }
+
+        rc = _dstore_store_nolock(ns_map, proc->rank, kv2);
+
+        /* unlock lock */
+        if (PMIX_SUCCESS != (rc = _ESH_WR_UNLOCK(ns_map->tbl_idx))) {
+            PMIX_ERROR_LOG(rc);
+        }
+
         PMIX_RELEASE(kv2);
         PMIX_DESTRUCT(&tmp);
     }
@@ -2481,7 +2477,7 @@ pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
     return rc;
 }
 
-static pmix_status_t _store_job_info(pmix_proc_t *proc)
+static pmix_status_t _store_job_info(ns_map_data_t *ns_map, pmix_proc_t *proc)
 {
     pmix_cb_t cb;
     pmix_kval_t *kv;
@@ -2546,7 +2542,7 @@ static pmix_status_t _store_job_info(pmix_proc_t *proc)
     }
 
     PMIX_UNLOAD_BUFFER(&buf, kvp->value->data.bo.bytes, kvp->value->data.bo.size);
-    if (PMIX_SUCCESS != (rc = _dstore_store(proc->nspace, proc->rank, kvp))) {
+    if (PMIX_SUCCESS != (rc = _dstore_store_nolock(ns_map, proc->rank, kvp))) {
         PMIX_ERROR_LOG(rc);
         goto exit;
     }
@@ -2574,10 +2570,23 @@ pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
                         peer->info->pname.nspace, peer->info->pname.rank);
 
     if (0 == ns->ndelivered) { // don't store twice
+        ns_map_data_t *ns_map;
         _client_compat_save(peer);
         (void)strncpy(proc.nspace, ns->nspace, PMIX_MAX_NSLEN);
         proc.rank = PMIX_RANK_WILDCARD;
-        rc = _store_job_info(&proc);
+        if (NULL == (ns_map = _esh_session_map_search(proc.nspace))) {
+            rc = PMIX_ERROR;
+            PMIX_ERROR_LOG(rc);
+            return rc;
+        }
+
+        /* set exclusive lock */
+        if (PMIX_SUCCESS != (rc = _ESH_WR_LOCK(ns_map->tbl_idx))) {
+            PMIX_ERROR_LOG(rc);
+            return rc;
+        }
+
+        rc = _store_job_info(ns_map, &proc);
         if (PMIX_SUCCESS != rc) {
             PMIX_ERROR_LOG(rc);
             return rc;
@@ -2585,11 +2594,16 @@ pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
 
         PMIX_LIST_FOREACH(rinfo, &ns->ranks, pmix_rank_info_t) {
             proc.rank = rinfo->pname.rank;
-            rc = _store_job_info(&proc);
+            rc = _store_job_info(ns_map, &proc);
             if (PMIX_SUCCESS != rc) {
                 PMIX_ERROR_LOG(rc);
                 return rc;
             }
+        }
+        /* set exclusive lock */
+        if (PMIX_SUCCESS != (rc = _ESH_WR_UNLOCK(ns_map->tbl_idx))) {
+            PMIX_ERROR_LOG(rc);
+            return rc;
         }
     }
 
