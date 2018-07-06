@@ -18,6 +18,7 @@
 
 #include <src/include/pmix_config.h>
 #include <pmix_common.h>
+#include "gds_dstore.h"
 
 #ifdef HAVE_PTHREAD_SHARED
 #define ESH_PTHREAD_LOCK

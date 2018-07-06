@@ -23,21 +23,23 @@
 # $HEADER$
 #
 
-AM_CPPFLAGS = -DESH_PTHREAD_LOCK_21 -DGDS_DS_NAME_STR=\"ds21\"
+AM_CPPFLAGS = -DGDS_DS_VER=21
 
 headers = \
         gds_dstore.h \
         ../ds_common/gds_dstore.h \
         ../ds_common/dstore_seg.h \
         ../ds_common/dstore_session.h \
-        ../ds_common/dstore_lock.h
+        ../ds_common/dstore_lock.h \
+        ../ds_common/dstore_nspace.h
 
 sources = \
         gds_dstore.c \
         gds_dstore_component.c \
         ../ds_common/gds_dstore.c \
         ../ds_common/dstore_seg.c \
-        ../ds_common/dstore_session.c
+        ../ds_common/dstore_session.c \
+        ../ds_common/dstore_nspace.c
 
 if DSTORE_PTHREAD_LOCK
 headers += ds21_lock_pthread.h

@@ -19,8 +19,8 @@
 #include <pmix_common.h>
 #include <src/include/pmix_config.h>
 
-#include "src/mca/gds/ds_common/dstore_lock.h"
 #include "src/mca/gds/ds_common/dstore_seg.h"
+#include "src/mca/gds/ds_common/dstore_lock.h"
 
 typedef struct session_s session_t;
 
@@ -30,11 +30,10 @@ struct session_s {
     char setjobuid;
     char *nspace_path;
     char *lockfile;
-#ifdef ESH_PTHREAD_LOCK
+#if (defined(ESH_PTHREAD_LOCK) && defined(ESH_PTHREAD_LOCK_12))
     pmix_pshmem_seg_t *lock_seg;
     pthread_rwlock_t *lock;
-#endif
-#ifdef xESH_PTHREAD_LOCK_21
+#elif (defined(ESH_PTHREAD_LOCK) && defined(ESH_PTHREAD_LOCK_21))
     pmix_pshmem_seg_t *lock_seg;
     pthread_mutex_t *lock;
     uint32_t num_locks, num_forked, num_procs;
@@ -56,16 +55,19 @@ struct session_s {
 #define _ESH_SESSION_in_use(tbl_idx)       (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].in_use)
 #define _ESH_SESSION_lockfd(tbl_idx)       (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lockfd)
 
-#ifdef ESH_PTHREAD_LOCK
+#ifdef ESH_PTHREAD_LOCK_12
 #define _ESH_SESSION_pthread_rwlock(tbl_idx) (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lock)
 #define _ESH_SESSION_pthread_seg(tbl_idx)   (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lock_seg)
 #define _ESH_SESSION_lock(tbl_idx)          _ESH_SESSION_pthread_rwlock(tbl_idx)
 #endif
-#ifdef xESH_PTHREAD_LOCK_21
+#ifdef ESH_PTHREAD_LOCK_21
 #define _ESH_SESSION_numlocks(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_locks)
 #define _ESH_SESSION_numprocs(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_procs)
-#define _ESH_SESSION_numforked(tbl_idx)    (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_fork)
+#define _ESH_SESSION_numforked(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].num_forked)
+#define _ESH_SESSION_lockidx(tbl_idx)     (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lock_idx)
 #define _ESH_SESSION_pthread_mutex(tbl_idx) (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lock)
+#define _ESH_SESSION_pthread_seg(tbl_idx)   (PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t)[tbl_idx].lock_seg)
+#define _ESH_SESSION_lock(tbl_idx)         _ESH_SESSION_pthread_mutex(tbl_idx)
 #endif
 
 #ifdef ESH_FCNTL_LOCK
@@ -73,5 +75,18 @@ struct session_s {
 #endif
 
 extern pmix_value_array_t *_session_array;
+
+#ifdef ESH_PTHREAD_LOCK_12
+pmix_status_t _esh_session_init(size_t idx, ns_map_data_t *m, const char *base_path, size_t jobuid, int setjobuid);
+#else
+pmix_status_t _esh_session_init(size_t idx, ns_map_data_t *m, const char *base_path, size_t jobuid,
+                                int setjobuid, uint32_t local_size);
+#endif
+void _esh_session_release(size_t tbl_idx);
+int _esh_session_tbl_add(size_t *tbl_idx);
+ns_map_data_t * _esh_session_map(const char *nspace, size_t tbl_idx);
+void _esh_session_map_clean(ns_map_t *m);
+int _esh_jobuid_tbl_search(uid_t jobuid, size_t *tbl_idx);
+int _esh_dir_del(const char *path);
 
 #endif // DSTORE_SESSION_H

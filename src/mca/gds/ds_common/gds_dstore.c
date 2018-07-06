@@ -16,11 +16,6 @@
 #include <src/include/pmix_config.h>
 
 #include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-#include <dirent.h>
-#include <errno.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -52,18 +47,14 @@
 #include "src/mca/gds/base/base.h"
 #include "src/mca/pshmem/base/base.h"
 
-#include "src/mca/gds/ds_common/dstore_lock.h"
 #include "src/mca/gds/ds_common/gds_dstore.h"
+#include "src/mca/gds/ds_common/dstore_lock.h"
 #include "src/mca/gds/ds_common/dstore_nspace.h"
 #include "src/mca/gds/ds_common/dstore_seg.h"
 #include "src/mca/gds/ds_common/dstore_session.h"
 
 #define ESH_REGION_EXTENSION        "EXTENSION_SLOT"
 #define ESH_REGION_INVALIDATED      "INVALIDATED"
-#define ESH_ENV_INITIAL_SEG_SIZE    "INITIAL_SEG_SIZE"
-#define ESH_ENV_NS_META_SEG_SIZE    "NS_META_SEG_SIZE"
-#define ESH_ENV_NS_DATA_SEG_SIZE    "NS_DATA_SEG_SIZE"
-#define ESH_ENV_LINEAR              "SM_USE_LINEAR_SEARCH"
 
 #define ESH_MIN_KEY_LEN             (sizeof(ESH_REGION_INVALIDATED))
 
@@ -293,18 +284,9 @@ static rank_meta_info *_get_rank_meta_info(pmix_rank_t rank, seg_desc_t *segdesc
 static uint8_t *_get_data_region_by_offset(seg_desc_t *segdesc, size_t offset);
 static inline ssize_t _get_univ_size(const char *nspace);
 
-static inline ns_map_data_t * _esh_session_map_search_server(const char *nspace);
-static inline ns_map_data_t * _esh_session_map_search_client(const char *nspace);
-static inline ns_map_data_t * _esh_session_map(const char *nspace, size_t tbl_idx);
-static inline void _esh_session_map_clean(ns_map_t *m);
-static inline int _esh_jobuid_tbl_search(uid_t jobuid, size_t *tbl_idx);
-static inline int _esh_session_tbl_add(size_t *tbl_idx);
-static inline int _esh_session_init(size_t idx, ns_map_data_t *m, size_t jobuid, int setjobuid);
-static inline void _esh_session_release(size_t tbl_idx);
 static inline void _esh_ns_track_cleanup(void);
 static inline void _esh_sessions_cleanup(void);
 static inline void _esh_ns_map_cleanup(void);
-static inline int _esh_dir_del(const char *dirname);
 static inline void _client_compat_save(pmix_peer_t *peer);
 static inline pmix_peer_t * _client_peer(void);
 
@@ -313,8 +295,6 @@ static inline int _my_client(const char *nspace, pmix_rank_t rank);
 pmix_status_t dstore_init(pmix_info_t info[], size_t ninfo);
 
 void dstore_finalize(void);
-
-pmix_status_t dstore_setup_fork(const pmix_proc_t *peer, char ***env);
 
 pmix_status_t dstore_cache_job_info(struct pmix_nspace_t *ns,
                                 pmix_info_t info[], size_t ninfo);
@@ -353,12 +333,11 @@ pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
                                 pmix_list_t *cbs,
                                 pmix_byte_object_t *bo);
 
-static char *_base_path = NULL;
-static uid_t _jobuid;
-static char _setjobuid = 0;
+char *_base_path = NULL;
+uid_t _jobuid;
+char _setjobuid = 0;
 static pmix_peer_t *_clients_peer = NULL;
 
-static pmix_value_array_t *_ns_map_array = NULL;
 static pmix_value_array_t *_ns_track_array = NULL;
 
 ns_map_data_t * (*_esh_session_map_search)(const char *nspace) = NULL;
@@ -383,67 +362,7 @@ PMIX_CLASS_INSTANCE(ns_track_elem_t,
                     pmix_value_array_t,
                     ncon, ndes);
 
-static inline void _esh_session_map_clean(ns_map_t *m) {
-    memset(m, 0, sizeof(*m));
-    m->data.track_idx = -1;
-}
-
-static inline int _esh_dir_del(const char *path)
-{
-    DIR *dir;
-    struct dirent *d_ptr;
-    struct stat st;
-    pmix_status_t rc = PMIX_SUCCESS;
-
-    char name[PMIX_PATH_MAX];
-
-    dir = opendir(path);
-    if (NULL == dir) {
-        rc = PMIX_ERR_BAD_PARAM;
-        return rc;
-    }
-
-    while (NULL != (d_ptr = readdir(dir))) {
-        snprintf(name, PMIX_PATH_MAX, "%s/%s", path, d_ptr->d_name);
-        if ( 0 > lstat(name, &st) ){
-            /* No fatal error here - just log this event
-             * we will hit the error later at rmdir. Keep trying ...
-             */
-            PMIX_ERROR_LOG(PMIX_ERR_NOT_FOUND);
-            continue;
-        }
-
-        if(S_ISDIR(st.st_mode)) {
-            if(strcmp(d_ptr->d_name, ".") && strcmp(d_ptr->d_name, "..")) {
-                rc = _esh_dir_del(name);
-                if( PMIX_SUCCESS != rc ){
-                    /* No fatal error here - just log this event
-                     * we will hit the error later at rmdir. Keep trying ...
-                     */
-                    PMIX_ERROR_LOG(rc);
-                }
-            }
-        }
-        else {
-            if( 0 > unlink(name) ){
-                /* No fatal error here - just log this event
-                 * we will hit the error later at rmdir. Keep trying ...
-                 */
-                PMIX_ERROR_LOG(PMIX_ERR_NO_PERMISSIONS);
-            }
-        }
-    }
-    closedir(dir);
-
-    /* remove the top dir */
-    if( 0 > rmdir(path) ){
-        rc = PMIX_ERR_NO_PERMISSIONS;
-        PMIX_ERROR_LOG(rc);
-    }
-    return rc;
-}
-
-static inline int _esh_tbls_init(void)
+int _esh_tbls_init(void)
 {
     pmix_status_t rc = PMIX_SUCCESS;
     size_t idx;
@@ -581,86 +500,7 @@ static inline void _esh_ns_track_cleanup(void)
     _ns_track_array = NULL;
 }
 
-static inline ns_map_data_t * _esh_session_map(const char *nspace, size_t tbl_idx)
-{
-    size_t map_idx;
-    size_t size = pmix_value_array_get_size(_ns_map_array);;
-    ns_map_t *ns_map = PMIX_VALUE_ARRAY_GET_BASE(_ns_map_array, ns_map_t);;
-    ns_map_t *new_map = NULL;
-
-    if (NULL == nspace) {
-        PMIX_ERROR_LOG(PMIX_ERR_BAD_PARAM);
-        return NULL;
-    }
-
-    for(map_idx = 0; map_idx < size; map_idx++) {
-        if (!ns_map[map_idx].in_use) {
-            ns_map[map_idx].in_use = true;
-            strncpy(ns_map[map_idx].data.name, nspace, sizeof(ns_map[map_idx].data.name)-1);
-            ns_map[map_idx].data.tbl_idx = tbl_idx;
-            return  &ns_map[map_idx].data;
-        }
-    }
-
-    if (NULL == (new_map = pmix_value_array_get_item(_ns_map_array, map_idx))) {
-        PMIX_ERROR_LOG(PMIX_ERR_OUT_OF_RESOURCE);
-        return NULL;
-    }
-
-    _esh_session_map_clean(new_map);
-    new_map->in_use = true;
-    new_map->data.tbl_idx = tbl_idx;
-    strncpy(new_map->data.name, nspace, sizeof(new_map->data.name)-1);
-
-    return  &new_map->data;
-}
-
-static inline int _esh_jobuid_tbl_search(uid_t jobuid, size_t *tbl_idx)
-{
-    size_t idx, size;
-    session_t *session_tbl = NULL;
-
-    size = pmix_value_array_get_size(_session_array);
-    session_tbl = PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t);
-
-    for(idx = 0; idx < size; idx++) {
-        if (session_tbl[idx].in_use && session_tbl[idx].jobuid == jobuid) {
-            *tbl_idx = idx;
-            return PMIX_SUCCESS;
-        }
-    }
-
-    return PMIX_ERR_NOT_FOUND;
-}
-
-static inline int _esh_session_tbl_add(size_t *tbl_idx)
-{
-    size_t idx;
-    size_t size = pmix_value_array_get_size(_session_array);
-    session_t *s_tbl = PMIX_VALUE_ARRAY_GET_BASE(_session_array, session_t);
-    session_t *new_sesion;
-    pmix_status_t rc = PMIX_SUCCESS;
-
-    for(idx = 0; idx < size; idx ++) {
-        if (0 == s_tbl[idx].in_use) {
-            s_tbl[idx].in_use = 1;
-            *tbl_idx = idx;
-            return PMIX_SUCCESS;
-        }
-    }
-
-    if (NULL == (new_sesion = pmix_value_array_get_item(_session_array, idx))) {
-        rc = PMIX_ERR_OUT_OF_RESOURCE;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-    s_tbl[idx].in_use = 1;
-    *tbl_idx = idx;
-
-    return PMIX_SUCCESS;
-}
-
-static inline ns_map_data_t * _esh_session_map_search_server(const char *nspace)
+ns_map_data_t * _esh_session_map_search_server(const char *nspace)
 {
     size_t idx, size = pmix_value_array_get_size(_ns_map_array);
     ns_map_t *ns_map = PMIX_VALUE_ARRAY_GET_BASE(_ns_map_array, ns_map_t);
@@ -677,7 +517,7 @@ static inline ns_map_data_t * _esh_session_map_search_server(const char *nspace)
     return NULL;
 }
 
-static inline ns_map_data_t * _esh_session_map_search_client(const char *nspace)
+ns_map_data_t * _esh_session_map_search_client(const char *nspace)
 {
     size_t idx, size = pmix_value_array_get_size(_ns_map_array);
     ns_map_t *ns_map = PMIX_VALUE_ARRAY_GET_BASE(_ns_map_array, ns_map_t);
@@ -693,98 +533,6 @@ static inline ns_map_data_t * _esh_session_map_search_client(const char *nspace)
         }
     }
     return _esh_session_map(nspace, 0);
-}
-
-static inline int _esh_session_init(size_t idx, ns_map_data_t *m, size_t jobuid, int setjobuid)
-{
-    seg_desc_t *seg = NULL;
-    session_t *s = &(PMIX_VALUE_ARRAY_GET_ITEM(_session_array, session_t, idx));
-    pmix_status_t rc = PMIX_SUCCESS;
-
-    s->setjobuid = setjobuid;
-    s->jobuid = jobuid;
-    s->nspace_path = strdup(_base_path);
-
-    /* create a lock file to prevent clients from reading while server is writing to the shared memory.
-    * This situation is quite often, especially in case of direct modex when clients might ask for data
-    * simultaneously.*/
-    if(0 > asprintf(&s->lockfile, "%s/dstore_sm.lock", s->nspace_path)) {
-        rc = PMIX_ERR_OUT_OF_RESOURCE;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-    PMIX_OUTPUT_VERBOSE((10, pmix_gds_base_framework.framework_output,
-        "%s:%d:%s _lockfile_name: %s", __FILE__, __LINE__, __func__, s->lockfile));
-
-    if (PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-        if (0 != mkdir(s->nspace_path, 0770)) {
-            if (EEXIST != errno) {
-                pmix_output(0, "session init: can not create session directory \"%s\": %s",
-                    s->nspace_path, strerror(errno));
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-        }
-        if (s->setjobuid > 0){
-            if (0 > chown(s->nspace_path, (uid_t) s->jobuid, (gid_t) -1)){
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
-            }
-        }
-        seg = _create_new_segment(INITIAL_SEGMENT, m->name, s->nspace_path, setjobuid, 0);
-        if( NULL == seg ){
-            rc = PMIX_ERR_OUT_OF_RESOURCE;
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-    }
-    else {
-        seg = _attach_new_segment(INITIAL_SEGMENT, m->name, s->nspace_path, 0);
-        if( NULL == seg ){
-            rc = PMIX_ERR_OUT_OF_RESOURCE;
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-    }
-    if (PMIX_SUCCESS != (rc = _ESH_LOCK_INIT(idx))) {
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-
-    s->sm_seg_first = seg;
-    s->sm_seg_last = s->sm_seg_first;
-    return PMIX_SUCCESS;
-}
-
-static inline void _esh_session_release(size_t tbl_idx)
-{
-    if (!_ESH_SESSION_in_use(tbl_idx)) {
-        return;
-    }
-
-    _delete_sm_desc(_ESH_SESSION_sm_seg_first(tbl_idx));
-    /* if the lock fd was somehow set, then we
-     * need to close it */
-    if (0 != _ESH_SESSION_lockfd(tbl_idx)) {
-        close(_ESH_SESSION_lockfd(tbl_idx));
-    }
-
-    if (NULL != _ESH_SESSION_lockfile(tbl_idx)) {
-        if(PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-            unlink(_ESH_SESSION_lockfile(tbl_idx));
-        }
-        free(_ESH_SESSION_lockfile(tbl_idx));
-    }
-    if (NULL != _ESH_SESSION_path(tbl_idx)) {
-        if(PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-            _esh_dir_del(_ESH_SESSION_path(tbl_idx));
-        }
-        free(_ESH_SESSION_path(tbl_idx));
-    }
-    _ESH_LOCK_FINI(tbl_idx);
-    memset(pmix_value_array_get_item(_session_array, tbl_idx), 0, sizeof(session_t));
 }
 
 /* This function synchronizes the content of initial shared segment and the local track list. */
@@ -1519,163 +1267,6 @@ pmix_status_t dstore_cache_job_info(struct pmix_nspace_t *ns,
     return PMIX_SUCCESS;
 }
 
-pmix_status_t dstore_init(pmix_info_t info[], size_t ninfo)
-{
-    pmix_status_t rc;
-    size_t n;
-    char *dstor_tmpdir = NULL;
-    size_t tbl_idx=0;
-    ns_map_data_t *ns_map = NULL;
-
-    pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
-                        "pmix:gds:dstore init");
-
-    /* open the pshmem and select the active plugins */
-    if( PMIX_SUCCESS != (rc = pmix_mca_base_framework_open(&pmix_pshmem_base_framework, 0)) ) {
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-    if( PMIX_SUCCESS != (rc = pmix_pshmem_base_select()) ) {
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    _jobuid = getuid();
-    _setjobuid = 0;
-
-    if (PMIX_SUCCESS != (rc = _esh_tbls_init())) {
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    rc = pmix_pshmem.init();
-    if (PMIX_SUCCESS != rc) {
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    _set_constants_from_env();
-
-    if (NULL != _base_path) {
-        free(_base_path);
-        _base_path = NULL;
-    }
-
-    /* find the temp dir */
-    if (PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-        _esh_session_map_search = _esh_session_map_search_server;
-
-        /* scan incoming info for directives */
-        if (NULL != info) {
-            for (n=0; n < ninfo; n++) {
-                if (0 == strcmp(PMIX_USERID, info[n].key)) {
-                    _jobuid = info[n].value.data.uint32;
-                    _setjobuid = 1;
-                    continue;
-                }
-                if (0 == strcmp(PMIX_DSTPATH, info[n].key)) {
-                    /* PMIX_DSTPATH is the way for RM to customize the
-                     * place where shared memory files are placed.
-                     * We need this for the following reasons:
-                     * - disk usage: files can be relatively large and the system may
-                     *   have a small common temp directory.
-                     * - performance: system may have a fast IO device (i.e. burst buffer)
-                     *   for the local usage.
-                     *
-                     * PMIX_DSTPATH has higher priority than PMIX_SERVER_TMPDIR
-                     */
-                    if( PMIX_STRING != info[n].value.type ){
-                        rc = PMIX_ERR_BAD_PARAM;
-                        PMIX_ERROR_LOG(rc);
-                        goto err_exit;
-                    }
-                    dstor_tmpdir = (char*)info[n].value.data.string;
-                    continue;
-                }
-                if (0 == strcmp(PMIX_SERVER_TMPDIR, info[n].key)) {
-                    if( PMIX_STRING != info[n].value.type ){
-                        rc = PMIX_ERR_BAD_PARAM;
-                        PMIX_ERROR_LOG(rc);
-                        goto err_exit;
-                    }
-                    if (NULL == dstor_tmpdir) {
-                        dstor_tmpdir = (char*)info[n].value.data.string;
-                    }
-                    continue;
-                }
-            }
-        }
-
-        if (NULL == dstor_tmpdir) {
-            if (NULL == (dstor_tmpdir = getenv("TMPDIR"))) {
-                if (NULL == (dstor_tmpdir = getenv("TEMP"))) {
-                    if (NULL == (dstor_tmpdir = getenv("TMP"))) {
-                        dstor_tmpdir = "/tmp";
-                    }
-                }
-            }
-        }
-
-        rc = asprintf(&_base_path, "%s/pmix_dstor_%s_%d", dstor_tmpdir, GDS_DS_NAME_STR, getpid());
-        if ((0 > rc) || (NULL == _base_path)) {
-            rc = PMIX_ERR_OUT_OF_RESOURCE;
-            PMIX_ERROR_LOG(rc);
-            goto err_exit;
-        }
-
-        if (0 != mkdir(_base_path, 0770)) {
-            if (EEXIST != errno) {
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                goto err_exit;
-            }
-        }
-        if (_setjobuid > 0) {
-            if (chown(_base_path, (uid_t) _jobuid, (gid_t) -1) < 0){
-                rc = PMIX_ERR_NO_PERMISSIONS;
-                PMIX_ERROR_LOG(rc);
-                goto err_exit;
-            }
-        }
-        _esh_session_map_search = _esh_session_map_search_server;
-        return PMIX_SUCCESS;
-    }
-    /* for clients */
-    else {
-        if (NULL == (dstor_tmpdir = getenv(PMIX_DSTORE_ESH_BASE_PATH))){
-            return PMIX_ERR_NOT_AVAILABLE; // simply disqualify ourselves
-        }
-        if (NULL == (_base_path = strdup(dstor_tmpdir))) {
-            rc = PMIX_ERR_OUT_OF_RESOURCE;
-            PMIX_ERROR_LOG(rc);
-            goto err_exit;
-        }
-        _esh_session_map_search = _esh_session_map_search_client;
-    }
-
-    rc = _esh_session_tbl_add(&tbl_idx);
-    if (PMIX_SUCCESS != rc) {
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    ns_map = _esh_session_map(pmix_globals.myid.nspace, tbl_idx);
-    if (NULL == ns_map) {
-        rc = PMIX_ERR_OUT_OF_RESOURCE;
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    if (PMIX_SUCCESS != (rc =_esh_session_init(tbl_idx, ns_map, _jobuid, _setjobuid))) {
-        PMIX_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    return PMIX_SUCCESS;
-err_exit:
-    return rc;
-}
-
 void dstore_finalize(void)
 {
     struct stat st = {0};
@@ -2219,95 +1810,6 @@ pmix_status_t dstore_fetch(const pmix_proc_t *proc,
     return rc;
 }
 
-pmix_status_t dstore_setup_fork(const pmix_proc_t *peer, char ***env)
-{
-    pmix_status_t rc = PMIX_SUCCESS;
-    ns_map_data_t *ns_map = NULL;
-
-    pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
-                        "gds: dstore setup fork");
-
-    if (NULL == _esh_session_map_search) {
-        rc = PMIX_ERR_NOT_AVAILABLE;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-
-    if (NULL == (ns_map = _esh_session_map_search(peer->nspace))) {
-        rc = PMIX_ERR_NOT_AVAILABLE;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-
-    if ((NULL == _base_path) || (strlen(_base_path) == 0)){
-        rc = PMIX_ERR_NOT_AVAILABLE;
-        PMIX_ERROR_LOG(rc);
-        return rc;
-    }
-
-    if(PMIX_SUCCESS != (rc = pmix_setenv(PMIX_DSTORE_ESH_BASE_PATH,
-                                        _ESH_SESSION_path(ns_map->tbl_idx), true, env))){
-        PMIX_ERROR_LOG(rc);
-    }
-    return rc;
-}
-
-pmix_status_t dstore_add_nspace(const char *nspace,
-                                pmix_info_t info[],
-                                size_t ninfo)
-{
-    pmix_status_t rc;
-    size_t tbl_idx=0;
-    uid_t jobuid = _jobuid;
-    char setjobuid = _setjobuid;
-    size_t n;
-    ns_map_data_t *ns_map = NULL;
-
-    pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
-                        "gds: dstore add nspace");
-
-    if (NULL != info) {
-        for (n=0; n < ninfo; n++) {
-            if (0 == strcmp(PMIX_USERID, info[n].key)) {
-                jobuid = info[n].value.data.uint32;
-                setjobuid = 1;
-                continue;
-            }
-        }
-    }
-
-    if (PMIX_SUCCESS != _esh_jobuid_tbl_search(jobuid, &tbl_idx)) {
-
-        rc = _esh_session_tbl_add(&tbl_idx);
-        if (PMIX_SUCCESS != rc) {
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-        ns_map = _esh_session_map(nspace, tbl_idx);
-        if (NULL == ns_map) {
-            rc = PMIX_ERROR;
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-
-        if (PMIX_SUCCESS != (rc =_esh_session_init(tbl_idx, ns_map, jobuid, setjobuid))) {
-            rc = PMIX_ERROR;
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-    }
-    else {
-        ns_map = _esh_session_map(nspace, tbl_idx);
-        if (NULL == ns_map) {
-            rc = PMIX_ERROR;
-            PMIX_ERROR_LOG(rc);
-            return rc;
-        }
-    }
-
-    return PMIX_SUCCESS;
-}
-
 pmix_status_t dstore_del_nspace(const char* nspace)
 {
     pmix_status_t rc = PMIX_SUCCESS;
@@ -2574,6 +2076,7 @@ pmix_status_t dstore_register_job_info(struct pmix_peer_t *pr,
         _client_compat_save(peer);
         (void)strncpy(proc.nspace, ns->nspace, PMIX_MAX_NSLEN);
         proc.rank = PMIX_RANK_WILDCARD;
+
         if (NULL == (ns_map = _esh_session_map_search(proc.nspace))) {
             rc = PMIX_ERROR;
             PMIX_ERROR_LOG(rc);

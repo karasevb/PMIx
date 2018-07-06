@@ -12,6 +12,14 @@
 #ifndef PMIX_DSTORE_H
 #define PMIX_DSTORE_H
 
+#if (defined(GDS_DS_VER)) && (GDS_DS_VER == 21)
+#define ESH_PTHREAD_LOCK_21
+#define GDS_DS_NAME_STR "ds21"
+#elif GDS_DS_VER == 12
+#define ESH_PTHREAD_LOCK_12
+#define GDS_DS_NAME_STR "ds12"
+#endif
+
 #include <src/include/pmix_config.h>
 #include "src/mca/gds/ds_common/dstore_seg.h"
 
@@ -27,6 +35,11 @@ BEGIN_C_DECLS
 #define NS_META_SEG_SIZE (1<<22)
 #define NS_DATA_SEG_SIZE (1<<22)
 
+#define ESH_ENV_INITIAL_SEG_SIZE    "INITIAL_SEG_SIZE"
+#define ESH_ENV_NS_META_SEG_SIZE    "NS_META_SEG_SIZE"
+#define ESH_ENV_NS_DATA_SEG_SIZE    "NS_DATA_SEG_SIZE"
+#define ESH_ENV_LINEAR              "SM_USE_LINEAR_SEARCH"
+
 #define PMIX_DSTORE_ESH_BASE_PATH "PMIX_DSTORE_ESH_BASE_PATH"
 
 typedef struct {
@@ -38,8 +51,6 @@ typedef struct {
     seg_desc_t *data_seg;
     bool in_use;
 } ns_track_elem_t;
-
-pmix_status_t dstore_init(pmix_info_t info[], size_t ninfo);
 
 void dstore_finalize(void);
 
@@ -65,10 +76,6 @@ pmix_status_t dstore_fetch(const pmix_proc_t *proc,
                                 pmix_info_t info[], size_t ninfo,
                                 pmix_list_t *kvs);
 
-pmix_status_t dstore_add_nspace(const char *nspace,
-                                pmix_info_t info[],
-                                size_t ninfo);
-
 pmix_status_t dstore_del_nspace(const char* nspace);
 
 pmix_status_t dstore_assign_module(pmix_info_t *info, size_t ninfo,
@@ -77,6 +84,15 @@ pmix_status_t dstore_assign_module(pmix_info_t *info, size_t ninfo,
 pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
                                 pmix_list_t *cbs,
                                 pmix_byte_object_t *bo);
+
+extern char *_base_path ;
+extern uid_t _jobuid;
+extern char _setjobuid;
+extern ns_map_data_t * (*_esh_session_map_search)(const char *nspace);
+
+int _esh_tbls_init(void);
+ns_map_data_t * _esh_session_map_search_server(const char *nspace);
+ns_map_data_t * _esh_session_map_search_client(const char *nspace);
 
 END_C_DECLS
 

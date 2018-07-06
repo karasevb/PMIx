@@ -48,7 +48,9 @@ size_t _max_ns_num;
 size_t _meta_segment_size = 0;
 size_t _max_meta_elems;
 size_t _data_segment_size = 0;
+#if (defined(GDS_DS_VER)) && (GDS_DS_VER == 12)
 size_t _lock_segment_size = 0;
+#endif
 
 /* If _direct_mode is set, it means that we use linear search
  * along the array of rank meta info objects inside a meta segment
@@ -68,50 +70,6 @@ int _pmix_getpagesize(void)
 #else
     return 65536; /* safer to overestimate than under */
 #endif
-}
-
-void _set_constants_from_env(void)
-{
-    char *str;
-    int page_size = _pmix_getpagesize();
-
-    if( NULL != (str = getenv(ESH_ENV_INITIAL_SEG_SIZE)) ) {
-        _initial_segment_size = strtoul(str, NULL, 10);
-        if ((size_t)page_size > _initial_segment_size) {
-            _initial_segment_size = (size_t)page_size;
-        }
-    }
-    if (0 == _initial_segment_size) {
-        _initial_segment_size = INITIAL_SEG_SIZE;
-    }
-    if( NULL != (str = getenv(ESH_ENV_NS_META_SEG_SIZE)) ) {
-        _meta_segment_size = strtoul(str, NULL, 10);
-        if ((size_t)page_size > _meta_segment_size) {
-            _meta_segment_size = (size_t)page_size;
-        }
-    }
-    if (0 == _meta_segment_size) {
-        _meta_segment_size = NS_META_SEG_SIZE;
-    }
-    if( NULL != (str = getenv(ESH_ENV_NS_DATA_SEG_SIZE)) ) {
-        _data_segment_size = strtoul(str, NULL, 10);
-        if ((size_t)page_size > _data_segment_size) {
-            _data_segment_size = (size_t)page_size;
-        }
-    }
-    if (0 == _data_segment_size) {
-        _data_segment_size = NS_DATA_SEG_SIZE;
-    }
-    if (NULL != (str = getenv(ESH_ENV_LINEAR))) {
-        if (1 == strtoul(str, NULL, 10)) {
-            _direct_mode = 1;
-        }
-    }
-
-    _lock_segment_size = page_size;
-    _max_ns_num = (_initial_segment_size - sizeof(size_t) * 2) / sizeof(ns_seg_info_t);
-    _max_meta_elems = (_meta_segment_size - sizeof(size_t)) / sizeof(rank_meta_info);
-
 }
 
 seg_desc_t *_create_new_segment(segment_type type, const char *name,
