@@ -68,7 +68,9 @@ extern size_t _max_ns_num;
 extern size_t _meta_segment_size;
 extern size_t _max_meta_elems;
 extern size_t _data_segment_size;
+#if (defined(GDS_DS_VER)) && (GDS_DS_VER == 12)
 extern size_t _lock_segment_size;
+#endif
 extern int _direct_mode;
 
 int _pmix_getpagesize(void);

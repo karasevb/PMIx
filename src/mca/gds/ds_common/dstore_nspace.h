@@ -16,7 +16,9 @@
 #ifndef NSPACE_INFO_H
 #define NSPACE_INFO_H
 
+#include <pmix_common.h>
 #include <src/include/pmix_config.h>
+#include "src/class/pmix_value_array.h"
 
 typedef struct ns_map_data_s ns_map_data_t;
 typedef struct ns_map_s ns_map_t;
@@ -31,5 +33,7 @@ struct ns_map_s {
     int in_use;
     ns_map_data_t data;
 };
+
+extern pmix_value_array_t *_ns_map_array;
 
 #endif // NSPACE_INFO_H
