@@ -18,7 +18,7 @@
 #include <pmix_common.h>
 
 #include "src/mca/gds/ds_common/dstore_lock.h"
-
+#include "src/mca/gds/ds_common/dstore_session.h"
 
 #define _ESH_12_FCNTL_LOCK(lockfd, operation)               \
 __pmix_attribute_extension__ ({                             \
@@ -60,9 +60,10 @@ __pmix_attribute_extension__ ({                             \
 
 #define _DS_INIT(idx) pmix_ds12_lock_init(idx)
 #define _DS_FINI(idx) pmix_ds12_lock_finalize(idx)
-#define _DS_WRLOCK(lock) _ESH_12_FCNTL_LOCK(lock, F_WRLCK)
-#define _DS_RDLOCK(lock) _ESH_12_FCNTL_LOCK(lock, F_RDLCK)
-#define _DS_UNLOCK(lock) _ESH_12_FCNTL_LOCK(lock, F_UNLCK)
+#define _DS_WR_LOCK(idx) _ESH_12_FCNTL_LOCK(_ESH_SESSION_lock(idx), F_WRLCK)
+#define _DS_RD_LOCK(idx) _ESH_12_FCNTL_LOCK(_ESH_SESSION_lock(idx), F_RDLCK)
+#define _DS_WR_UNLOCK(idx) _ESH_12_FCNTL_LOCK(_ESH_SESSION_lock(idx), F_UNLCK)
+#define _DS_RD_UNLOCK(idx) _ESH_12_FCNTL_LOCK(_ESH_SESSION_lock(idx), F_UNLCK)
 
 pmix_status_t pmix_ds12_lock_init(size_t session_idx);
 void pmix_ds12_lock_finalize(size_t session_idx);

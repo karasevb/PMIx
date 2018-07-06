@@ -18,6 +18,7 @@
 #include <pmix_common.h>
 
 #include "src/mca/pshmem/pshmem.h"
+#include "src/mca/gds/ds_common/dstore_session.h"
 
 #define _ESH_12_PTHREAD_LOCK(rwlock, func)                  \
 __pmix_attribute_extension__ ({                             \
@@ -43,9 +44,10 @@ __pmix_attribute_extension__ ({                             \
 
 #define _DS_INIT(idx) pmix_ds12_lock_init(idx)
 #define _DS_FINI(idx) pmix_ds12_lock_finalize(idx)
-#define _DS_WRLOCK(rwlock) _ESH_12_PTHREAD_LOCK(rwlock, wrlock)
-#define _DS_RDLOCK(rwlock) _ESH_12_PTHREAD_LOCK(rwlock, rdlock)
-#define _DS_UNLOCK(rwlock) _ESH_12_PTHREAD_LOCK(rwlock, unlock)
+#define _DS_WR_LOCK(idx) _ESH_12_PTHREAD_LOCK(_ESH_SESSION_lock(idx), wrlock)
+#define _DS_RD_LOCK(idx) _ESH_12_PTHREAD_LOCK(_ESH_SESSION_lock(idx), rdlock)
+#define _DS_WR_UNLOCK(idx) _ESH_12_PTHREAD_LOCK(_ESH_SESSION_lock(idx), unlock)
+#define _DS_RD_UNLOCK(idx) _ESH_12_PTHREAD_LOCK(_ESH_SESSION_lock(idx), unlock)
 
 pmix_status_t pmix_ds12_lock_init(size_t session_idx);
 void pmix_ds12_lock_finalize(size_t session_idx);

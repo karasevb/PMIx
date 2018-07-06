@@ -19,6 +19,7 @@
 #include <pmix_common.h>
 #include <src/include/pmix_config.h>
 
+#include "src/mca/gds/ds_common/dstore_lock.h"
 #include "src/mca/gds/ds_common/dstore_seg.h"
 
 typedef struct session_s session_t;
