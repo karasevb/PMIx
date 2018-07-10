@@ -149,7 +149,6 @@ pmix_status_t _esh_pthread_lock_w(size_t session_idx)
     pthread_mutex_t *locks = _ESH_SESSION_pthread_mutex(session_idx);
     uint32_t num_locks = _ESH_SESSION_numlocks(session_idx);
     uint32_t i;
-    pmix_status_t rc = PMIX_SUCCESS;
 
     /* Lock the "signalling" lock first to let clients know that
      * server is going to get a write lock.
@@ -157,7 +156,9 @@ pmix_status_t _esh_pthread_lock_w(size_t session_idx)
      * so this loop should be relatively dast.
      */
     for (i = 0; i < num_locks; i++) {
-        pthread_mutex_lock(&locks[2*i]);
+        if (0 != pthread_mutex_lock(&locks[2*i])) {
+            return PMIX_ERROR;
+        }
     }
 
     /* Now we can go and grab the main locks
@@ -167,11 +168,12 @@ pmix_status_t _esh_pthread_lock_w(size_t session_idx)
      * locks will be done
      */
     for(i = 0; i < num_locks; i++) {
-        pthread_mutex_lock(&locks[2*i + 1]);
+        if (0 != pthread_mutex_lock(&locks[2*i + 1])) {
+            return PMIX_ERROR;
+        }
     }
 
-    /* TODO: consider rc from mutex functions */
-    return rc;
+    return PMIX_SUCCESS;
 }
 
 pmix_status_t _esh_pthread_unlock_w(size_t session_idx)
@@ -179,16 +181,19 @@ pmix_status_t _esh_pthread_unlock_w(size_t session_idx)
     pthread_mutex_t *locks = _ESH_SESSION_pthread_mutex(session_idx);
     uint32_t num_locks = _ESH_SESSION_numlocks(session_idx);
     uint32_t i;
-    pmix_status_t rc = PMIX_SUCCESS;
 
     /* Lock the second lock first to ensure that all procs will see
      * that we are trying to grab the main one */
     for(i=0; i<num_locks; i++) {
-        pthread_mutex_unlock(&locks[2*i]);
-        pthread_mutex_unlock(&locks[2*i + 1]);
+        if (0 != pthread_mutex_unlock(&locks[2*i])) {
+            return PMIX_ERROR;
+        }
+        if (0 != pthread_mutex_unlock(&locks[2*i + 1])) {
+            return PMIX_ERROR;
+        }
     }
-    /* TODO: consider rc from mutex functions */
-    return rc;
+
+    return PMIX_SUCCESS;
 }
 
 pmix_status_t _esh_pthread_lock_r(size_t session_idx)
@@ -200,16 +205,21 @@ pmix_status_t _esh_pthread_lock_r(size_t session_idx)
      * this is a barrier that server is using to let clients
      * know that it is going to grab the write lock
      */
-    pthread_mutex_lock(&locks[2 * idx]);
+    if (0 != pthread_mutex_lock(&locks[2 * idx])) {
+        return PMIX_ERROR;
+    }
 
     /* Now grab the main lock */
-    pthread_mutex_lock(&locks[2*idx + 1]);
+    if (0 != pthread_mutex_lock(&locks[2*idx + 1])) {
+        return PMIX_ERROR;
+    }
 
     /* Once done - release signalling lock */
-    pthread_mutex_unlock(&locks[2*idx]);
+    if (0 != pthread_mutex_unlock(&locks[2*idx])) {
+        return PMIX_ERROR;
+    }
 
-    /* TODO: consider rc from mutex functions */
-    return 0;
+    return PMIX_SUCCESS;
 }
 
 pmix_status_t _esh_pthread_unlock_r(size_t session_idx)
@@ -218,8 +228,9 @@ pmix_status_t _esh_pthread_unlock_r(size_t session_idx)
     uint32_t idx = _ESH_SESSION_lockidx(session_idx);
 
     /* Release the main lock */
-    pthread_mutex_unlock(&locks[2*idx + 1]);
+    if (0 != pthread_mutex_unlock(&locks[2*idx + 1])) {
+        return PMIX_SUCCESS;
+    }
 
-    /* TODO: consider rc from mutex functions */
-    return 0;
+    return PMIX_SUCCESS;
 }
