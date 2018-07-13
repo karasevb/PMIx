@@ -13,123 +13,218 @@
  * $HEADER$
  */
 
-#include <pthread.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-
 #include <src/include/pmix_config.h>
 #include <pmix_common.h>
 
-#include "gds_dstore.h"
-#include "ds12_lock_pthread.h"
+#include "src/mca/common/pmix_common_dstore.h"
+#include "src/mca/pshmem/pshmem.h"
+
 #include "src/util/error.h"
 #include "src/util/output.h"
-#include "src/mca/pshmem/pshmem.h"
-#include "src/include/pmix_globals.h"
 
-#include "src/mca/gds/ds_common/dstore_lock.h"
-#include "src/mca/gds/ds_common/dstore_seg.h"
-#include "src/mca/gds/ds_common/dstore_session.h"
+#define _ESH_12_PTHREAD_LOCK(rwlock, func)                  \
+__pmix_attribute_extension__ ({                             \
+    pmix_status_t ret = PMIX_SUCCESS;                       \
+    int rc;                                                 \
+    rc = pthread_rwlock_##func(rwlock);                     \
+    if (0 != rc) {                                          \
+        switch (errno) {                                    \
+            case EINVAL:                                    \
+                ret = PMIX_ERR_INIT;                        \
+                break;                                      \
+            case EPERM:                                     \
+                ret = PMIX_ERR_NO_PERMISSIONS;              \
+                break;                                      \
+        }                                                   \
+    }                                                       \
+    if (ret) {                                              \
+        pmix_output(0, "%s %d:%s lock failed: %s",          \
+            __FILE__, __LINE__, __func__, strerror(errno)); \
+    }                                                       \
+    ret;                                                    \
+})
 
-pmix_status_t pmix_ds12_lock_init(size_t session_idx)
+typedef struct {
+    char *lockfile;
+    pmix_pshmem_seg_t *segment;
+    pthread_rwlock_t *rwlock;
+} ds12_lock_pthread_ctx_t;
+
+pmix_common_dstor_lock_ctx_t *pmix_gds_ds12_lock_init(const char *base_path, uid_t uid, bool setuid)
 {
+    ds12_lock_pthread_ctx_t *lock_ctx = NULL;
+    size_t size = _lock_segment_size; // TODO
     pmix_status_t rc = PMIX_SUCCESS;
-    size_t size = _lock_segment_size;
     pthread_rwlockattr_t attr;
-    char *lockfile = _ESH_SESSION_lockfile(session_idx);
-    char setjobuid = _ESH_SESSION_setjobuid(session_idx);
-    uid_t jobuid = _ESH_SESSION_jobuid(session_idx);
 
-    if ((NULL != _ESH_SESSION_pthread_rwlock(session_idx)) || (NULL != _ESH_SESSION_pthread_seg(session_idx))) {
-        rc = PMIX_ERR_INIT;
-        return rc;
+    lock_ctx = (ds12_lock_pthread_ctx_t*)malloc(sizeof(ds12_lock_pthread_ctx_t));
+    if (NULL == lock_ctx) {
+        PMIX_ERROR_LOG(PMIX_ERR_INIT);
+        goto error;
     }
-    _ESH_SESSION_pthread_seg(session_idx) = (pmix_pshmem_seg_t *)malloc(sizeof(pmix_pshmem_seg_t));
-    if (NULL == _ESH_SESSION_pthread_seg(session_idx)) {
-        rc = PMIX_ERR_OUT_OF_RESOURCE;
-        return rc;
+    memset(lock_ctx, 0, sizeof(ds12_lock_pthread_ctx_t));
+
+    lock_ctx->segment = (pmix_pshmem_seg_t *)malloc(sizeof(pmix_pshmem_seg_t));
+    if (NULL == lock_ctx->segment) {
+        PMIX_ERROR_LOG(PMIX_ERR_OUT_OF_RESOURCE);
+        goto error;
     }
+
+    /* create a lock file to prevent clients from reading while server is writing
+     * to the shared memory. This situation is quite often, especially in case of
+     * direct modex when clients might ask for data simultaneously. */
+    if(0 > asprintf(&lock_ctx->lockfile, "%s/dstore_sm.lock", base_path)) {
+        PMIX_ERROR_LOG(PMIX_ERR_OUT_OF_RESOURCE);
+        goto error;
+    }
+
     if (PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
-        if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_create(_ESH_SESSION_pthread_seg(session_idx), lockfile, size))) {
-            return rc;
+        if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_create(lock_ctx->segment,
+                                            lock_ctx->lockfile, size))) {
+            PMIX_ERROR_LOG(rc);
+            goto error;
         }
-        memset(_ESH_SESSION_pthread_seg(session_idx)->seg_base_addr, 0, size);
-        if (setjobuid > 0) {
-            if (0 > chown(lockfile, (uid_t) jobuid, (gid_t) -1)){
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
+        memset(lock_ctx->segment->seg_base_addr, 0, size);
+        if (0 != setuid) {
+            if (0 > chown(lock_ctx->lockfile, (uid_t) uid, (gid_t) -1)){
+                PMIX_ERROR_LOG(PMIX_ERROR);
+                goto error;
             }
             /* set the mode as required */
             if (0 > chmod(lockfile, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP )) {
-                rc = PMIX_ERROR;
-                PMIX_ERROR_LOG(rc);
-                return rc;
+                PMIX_ERROR_LOG(PMIX_ERROR);
+                goto error;
             }
         }
-        _ESH_SESSION_pthread_rwlock(session_idx) = (pthread_rwlock_t *)_ESH_SESSION_pthread_seg(session_idx)->seg_base_addr;
+        lock_ctx->rwlock = (pthread_rwlock_t *)lock_ctx->segment->seg_base_addr;
 
         if (0 != pthread_rwlockattr_init(&attr)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(session_idx));
-            return rc;
+            PMIX_ERROR_LOG(PMIX_ERR_INIT);
+            goto error;
         }
         if (0 != pthread_rwlockattr_setpshared(&attr, PTHREAD_PROCESS_SHARED)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(session_idx));
             pthread_rwlockattr_destroy(&attr);
-            return rc;
+            PMIX_ERROR_LOG(PMIX_ERR_INIT);
+            goto error;
         }
 #ifdef HAVE_PTHREAD_SETKIND
-        if (0 != pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(session_idx));
+        if (0 != pthread_rwlockattr_setkind_np(&attr,
+                                PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)) {
             pthread_rwlockattr_destroy(&attr);
-            return rc;
+            PMIX_ERROR_LOG(PMIX_ERR_INIT);
+            goto error;
         }
 #endif
-        if (0 != pthread_rwlock_init(_ESH_SESSION_pthread_rwlock(session_idx), &attr)) {
-            rc = PMIX_ERR_INIT;
-            pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(session_idx));
+        if (0 != pthread_rwlock_init(lock_ctx->rwlock, &attr)) {
             pthread_rwlockattr_destroy(&attr);
-            return rc;
+            PMIX_ERROR_LOG(PMIX_ERR_INIT);
+            goto error;
         }
         if (0 != pthread_rwlockattr_destroy(&attr)) {
-            rc = PMIX_ERR_INIT;
-            return rc;
+            PMIX_ERROR_LOG(PMIX_ERR_INIT);
+            goto error;
         }
 
     }
     else {
-        _ESH_SESSION_pthread_seg(session_idx)->seg_size = size;
-        snprintf(_ESH_SESSION_pthread_seg(session_idx)->seg_name, PMIX_PATH_MAX, "%s", lockfile);
-        if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_attach(_ESH_SESSION_pthread_seg(session_idx), PMIX_PSHMEM_RW))) {
-            return rc;
+        lock_ctx->segment->seg_size = size;
+        snprintf(lock_ctx->segment->seg_name, PMIX_PATH_MAX, "%s", lock_ctx->lockfile);
+        if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_attach(lock_ctx->segment,
+                                                             PMIX_PSHMEM_RW))) {
+            PMIX_ERROR_LOG(rc);
+            goto error;
         }
-        _ESH_SESSION_pthread_rwlock(session_idx) = (pthread_rwlock_t *)_ESH_SESSION_pthread_seg(session_idx)->seg_base_addr;
+        lock_ctx->rwlock = (pthread_rwlock_t *)lock_ctx->segment->seg_base_addr;
     }
 
-    return rc;
+    return (pmix_common_dstor_lock_ctx_t)lock_ctx;
+
+error:
+    if (NULL != lock_ctx) {
+        if (lock_ctx->segment) {
+            /* detach & unlink from current desc */
+            if (lock_ctx->segment->seg_cpid == getpid()) {
+                pmix_pshmem.segment_unlink(lock_ctx->segment);
+            }
+            pmix_pshmem.segment_detach(lock_ctx->segment->seg_base_addr);
+            lock_ctx->rwlock = NULL;
+        }
+        if (NULL != lock_ctx->lockfile) {
+            free(lock_ctx->lockfile);
+        }
+        free(lock_ctx);
+        lock_ctx = NULL;
+    }
+    return NULL;
 }
 
-void pmix_ds12_lock_finalize(size_t session_idx)
+void pmix_ds12_lock_finalize(pmix_common_dstor_lock_ctx_t lock_ctx)
 {
-    pmix_status_t rc;
+    ds12_lock_pthread_ctx_t *pthread_lock =
+            (ds12_lock_pthread_ctx_t*)lock_ctx;
 
-    if (0 != pthread_rwlock_destroy(_ESH_SESSION_pthread_rwlock(session_idx))) {
-        rc = PMIX_ERROR;
-        PMIX_ERROR_LOG(rc);
+    if (NULL == pthread_lock) {
+        PMIX_ERROR_LOG(PMIX_ERR_NOT_FOUND);
+        return;
+    }
+    if (0 != pthread_rwlock_destroy(pthread_lock->rwlock)) {
+        PMIX_ERROR_LOG(PMIX_ERROR);
         return;
     }
 
     /* detach & unlink from current desc */
-    if (_ESH_SESSION_pthread_seg(session_idx)->seg_cpid == getpid()) {
-        pmix_pshmem.segment_unlink(_ESH_SESSION_pthread_seg(session_idx));
+    if (pthread_lock->segment->seg_cpid == getpid()) {
+        pmix_pshmem.segment_unlink(pthread_lock->segment);
     }
-    pmix_pshmem.segment_detach(_ESH_SESSION_pthread_seg(session_idx));
+    pmix_pshmem.segment_detach(pthread_lock->segment);
 
-    free(_ESH_SESSION_pthread_seg(session_idx));
-    _ESH_SESSION_pthread_seg(session_idx) = NULL;
-    _ESH_SESSION_pthread_rwlock(session_idx) = NULL;
+    free(pthread_lock->segment);
+    pthread_lock->segment = NULL;
+    pthread_lock->rwlock = NULL;
+    free(pthread_lock);
+}
+
+pmix_status_t pmix_ds12_lock_rd_get(pmix_common_dstor_lock_ctx_t lock_ctx)
+{
+    ds12_lock_pthread_ctx_t *pthread_lock = (ds12_lock_pthread_ctx_t*)lock_ctx;
+    pmix_status_t rc;
+
+    if (NULL == pthread_lock) {
+        rc = PMIX_ERR_NOT_FOUND;
+        PMIX_ERROR_LOG(rc);
+        return rc;
+    }
+    rc = _ESH_12_PTHREAD_LOCK(pthread_lock->rwlock, rdlock);
+
+    return rc;
+}
+
+pmix_status_t pmix_ds12_lock_wr_get(pmix_common_dstor_lock_ctx_t lock_ctx)
+{
+    ds12_lock_pthread_ctx_t *pthread_lock = (ds12_lock_pthread_ctx_t*)lock_ctx;
+    pmix_status_t rc;
+
+    if (NULL == pthread_lock) {
+        rc = PMIX_ERR_NOT_FOUND;
+        PMIX_ERROR_LOG(rc);
+        return rc;
+    }
+    rc = _ESH_12_PTHREAD_LOCK(pthread_lock->rwlock, wrlock);
+
+    return rc;
+}
+
+pmix_status_t pmix_ds12_lock_rw_rel(pmix_common_dstor_lock_ctx_t lock_ctx)
+{
+    ds12_lock_pthread_ctx_t *pthread_lock = (ds12_lock_pthread_ctx_t*)lock_ctx;
+    pmix_status_t rc;
+
+    if (NULL == pthread_lock) {
+        rc = PMIX_ERR_NOT_FOUND;
+        PMIX_ERROR_LOG(rc);
+        return rc;
+    }
+    rc = _ESH_12_PTHREAD_LOCK(pthread_lock->rwlock, unlock);
+
+    return rc;
 }

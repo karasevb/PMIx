@@ -47,6 +47,10 @@
 #include "src/mca/gds/ds_common/dstore_seg.h"
 #include "src/mca/gds/ds_common/dstore_session.h"
 
+#include "src/mca/common/pmix_common_dstore.h"
+
+static pmix_dstor_lock_callbacks_t *ds12_lock;
+
 void _set_constants_from_env(void)
 {
     char *str;
@@ -186,6 +190,8 @@ static pmix_status_t ds12_init(pmix_info_t info[], size_t ninfo)
                 }
             }
         }
+
+        pmix_common_dstor_init("ds12");
 
         rc = asprintf(&_base_path, "%s/pmix_dstor_%s_%d", dstor_tmpdir, GDS_DS_NAME_STR, getpid());
         if ((0 > rc) || (NULL == _base_path)) {
@@ -369,6 +375,8 @@ static pmix_status_t ds12_add_nspace(const char *nspace,
 
     return PMIX_SUCCESS;
 }
+
+static pdstor_ctx *ctx;
 
 pmix_gds_base_module_t pmix_ds12_module = {
     .name = "ds12",
