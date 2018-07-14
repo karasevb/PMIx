@@ -14,13 +14,28 @@
  */
 
 #include <src/include/pmix_config.h>
+
+#include <stdio.h>
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_SYS_STAT_H
+#include <sys/stat.h>
+#endif
+
 #include <pmix_common.h>
 
-#include "src/mca/common/pmix_common_dstore.h"
+#include "src/mca/common/dstore/dstore_common.h"
+#include "src/mca/gds/base/base.h"
 #include "src/mca/pshmem/pshmem.h"
 
 #include "src/util/error.h"
 #include "src/util/output.h"
+
+#include "ds12_lock.h"
 
 #define _ESH_12_PTHREAD_LOCK(rwlock, func)                  \
 __pmix_attribute_extension__ ({                             \
@@ -50,10 +65,21 @@ typedef struct {
     pthread_rwlock_t *rwlock;
 } ds12_lock_pthread_ctx_t;
 
+static int _pmix_getpagesize(void)
+{
+#if defined(_SC_PAGESIZE )
+    return sysconf(_SC_PAGESIZE);
+#elif defined(_SC_PAGE_SIZE)
+    return sysconf(_SC_PAGE_SIZE);
+#else
+    return 65536; /* safer to overestimate than under */
+#endif
+}
+
 pmix_common_dstor_lock_ctx_t *pmix_gds_ds12_lock_init(const char *base_path, uid_t uid, bool setuid)
 {
     ds12_lock_pthread_ctx_t *lock_ctx = NULL;
-    size_t size = _lock_segment_size; // TODO
+    size_t size = _pmix_getpagesize();
     pmix_status_t rc = PMIX_SUCCESS;
     pthread_rwlockattr_t attr;
 
@@ -77,6 +103,8 @@ pmix_common_dstor_lock_ctx_t *pmix_gds_ds12_lock_init(const char *base_path, uid
         PMIX_ERROR_LOG(PMIX_ERR_OUT_OF_RESOURCE);
         goto error;
     }
+    PMIX_OUTPUT_VERBOSE((10, pmix_gds_base_framework.framework_output,
+        "%s:%d:%s _lockfile_name: %s", __FILE__, __LINE__, __func__, lock_ctx->lockfile));
 
     if (PMIX_PROC_IS_SERVER(pmix_globals.mypeer)) {
         if (PMIX_SUCCESS != (rc = pmix_pshmem.segment_create(lock_ctx->segment,
@@ -91,7 +119,7 @@ pmix_common_dstor_lock_ctx_t *pmix_gds_ds12_lock_init(const char *base_path, uid
                 goto error;
             }
             /* set the mode as required */
-            if (0 > chmod(lockfile, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP )) {
+            if (0 > chmod(lock_ctx->lockfile, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP )) {
                 PMIX_ERROR_LOG(PMIX_ERROR);
                 goto error;
             }
@@ -146,7 +174,7 @@ error:
             if (lock_ctx->segment->seg_cpid == getpid()) {
                 pmix_pshmem.segment_unlink(lock_ctx->segment);
             }
-            pmix_pshmem.segment_detach(lock_ctx->segment->seg_base_addr);
+            pmix_pshmem.segment_detach(lock_ctx->segment);
             lock_ctx->rwlock = NULL;
         }
         if (NULL != lock_ctx->lockfile) {

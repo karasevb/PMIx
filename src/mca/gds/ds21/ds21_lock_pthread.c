@@ -57,6 +57,8 @@ pmix_common_dstor_lock_ctx_t *pmix_gds_ds21_lock_init(const char *base_path, uid
         PMIX_ERROR_LOG(PMIX_ERR_OUT_OF_RESOURCE);
         goto error;
     }
+    PMIX_OUTPUT_VERBOSE((10, pmix_gds_base_framework.framework_output,
+        "%s:%d:%s _lockfile_name: %s", __FILE__, __LINE__, __func__, lock_ctx->lockfile));
 
     size = (2 * lock_ctx->num_locks * sizeof(pthread_mutex_t) / page_size + 1) * page_size;
 

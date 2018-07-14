@@ -14,7 +14,7 @@
 #include <src/include/pmix_config.h>
 #include <pmix_common.h>
 
-#include "src/mca/common/pmix_common_dstore.h"
+#include "src/mca/common/dstore/dstore_common.h"
 
 pmix_common_dstor_lock_ctx_t *pmix_gds_ds12_lock_init(const char *base_path, uid_t uid, bool setuid);
 void pmix_ds12_lock_finalize(pmix_common_dstor_lock_ctx_t lock_ctx);
