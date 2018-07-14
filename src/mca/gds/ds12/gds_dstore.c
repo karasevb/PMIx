@@ -42,14 +42,17 @@
 #include "src/mca/pshmem/base/base.h"
 
 #include "gds_dstore.h"
-#include "src/mca/gds/ds_common/dstore_lock.h"
+//#include "src/mca/gds/ds_common/dstore_lock.h"
 #include "src/mca/gds/ds_common/gds_dstore.h"
 #include "src/mca/gds/ds_common/dstore_seg.h"
 #include "src/mca/gds/ds_common/dstore_session.h"
 
-#include "src/mca/common/pmix_common_dstore.h"
+//#include "src/mca/common/pmix_common_dstore.h"
+//#include "ds12_lock.h"
 
-static pmix_dstor_lock_callbacks_t *ds12_lock;
+//static pmix_common_lock_callbacks_t *ds12_lock_cb = &pmix_ds12_lock_module;
+static pmix_common_dstor_lock_ctx_t ds12_lock_ctx;
+static pmix_ds12_ctx_t *ds12_ctx;
 
 void _set_constants_from_env(void)
 {
@@ -104,6 +107,11 @@ static pmix_status_t ds12_init(pmix_info_t info[], size_t ninfo)
 
     pmix_output_verbose(2, pmix_gds_base_framework.framework_output,
                         "pmix:gds:dstore init");
+
+    //ds12_lock_ctx = pmix_ds12_lock_module.init();
+
+    //ds12_ctx = pmix_common_dstor_init(&pmix_ds12_lock_module,
+    //                                  path, "ds12", info, ninfo);
 
     /* open the pshmem and select the active plugins */
     if( PMIX_SUCCESS != (rc = pmix_mca_base_framework_open(&pmix_pshmem_base_framework, 0)) ) {

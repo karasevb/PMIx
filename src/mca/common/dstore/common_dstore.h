@@ -40,18 +40,10 @@ typedef struct {
 
 typedef struct pmix_common_dstore_ctx_s pmix_common_dstore_ctx_t;
 
-/* Goes to the internal header
-struct pmix_dstore_ctx_s {
-	pmix_dstor_lock_callbacks_t *lock_cbs;
-
-	pmix_value_array_t *session_array;
-	pmix_value_array_t *ns_map_array;
-
-	gds_ds_base_hndl_init_fn_t init;
-	gds_ds_base_hndl_finalize_fn_t finalize;
-} pmix_dstore_ctx_t;
-
-*/
+pmix_common_dstore_ctx_t *pmix_common_dstor_init(pmix_common_lock_callbacks_t *lock_cb,
+                                const char *ds_name, const char *path,
+                                pmix_info_t info[], size_t ninfo);
+pmix_status_t pmix_common_dstor_finalize(pmix_common_dstore_ctx_t *dstore_ctx);
 
 /*
  * Goes to internal header
@@ -67,44 +59,40 @@ typedef struct {
 } ns_map_data_t;
 
 typedef struct {
-	int in_use;
-	uid_t jobuid;
-	char setjobuid;
-	char *nspace_path;
-	seg_desc_t *sm_seg_first;
-	seg_desc_t *sm_seg_last;
+    int in_use;
+    uid_t jobuid;
+    char setjobuid;
+    char *nspace_path;
+    seg_desc_t *sm_seg_first;
+    seg_desc_t *sm_seg_last;
 } gds_ds_base_session_t;
 */
 
-pmix_dstore_ctx_t *pmix_common_dstor_init(pmix_dstor_lock_callbacks_t *lock_cb,
-                                   const char *paths, const char *ds_name);
-pmix_status_t pmix_common_dstor_finalize(pmix_dstore_ctx_t *ctx);
-
 /*
-typedef pmix_status_t (*gds_ds_base_hndl_assign_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_assign(gds_ds_base_hndl_t *ds_hndl,
 		pmix_info_t *info, size_t ninfo, int *priority);
-typedef pmix_status_t (*gds_ds_base_hndl_job_info_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_job_info(gds_ds_base_hndl_t *ds_hndl,
 		struct pmix_nspace_t *ns, pmix_info_t info[], size_t ninfo);
-typedef pmix_status_t (*gds_ds_base_hndl_register_job_info_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_register_job(gds_ds_base_hndl_t *ds_hndl,
 		struct pmix_peer_t *pr, pmix_buffer_t *reply);
-typedef pmix_status_t (*gds_ds_base_hndl_store_job_info_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_store_job_info(gds_ds_base_hndl_t *ds_hndl,
 		const char *nspace, pmix_buffer_t *buf);
-typedef pmix_status_t (*gds_ds_base_hndl_store_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_store_fn_t)(gds_ds_base_hndl_t *ds_hndl,
 		const pmix_proc_t *proc, pmix_scope_t scope, pmix_kval_t *kv);
-typedef pmix_status_t (*gds_ds_base_hndl_store_modex_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_store_modex(gds_ds_base_hndl_t *ds_hndl,
 		struct pmix_nspace_t *ns, pmix_list_t *cbs, pmix_byte_object_t *bo);
-typedef pmix_status_t (*gds_ds_base_hndl_fetch_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_fetch(gds_ds_base_hndl_t *ds_hndl,
 		const pmix_proc_t *proc, pmix_scope_t scope, bool copy, const char *key,
 		pmix_info_t info[], size_t ninfo, pmix_list_t *kvs);
-typedef pmix_status_t (*gds_ds_base_hndl_setup_fork_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_setup_fork(gds_ds_base_hndl_t *ds_hndl,
 		const pmix_proc_t *proc, r ***env);
-typedef pmix_status_t (*gds_ds_base_hndl_add_nspace_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_add_nspace(gds_ds_base_hndl_t *ds_hndl,
 		const char *nspace, pmix_info_t info[], size_t ninfo);
-typedef pmix_status_t (*gds_ds_base_hndl_del_nspace_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_del_nspace(gds_ds_base_hndl_t *ds_hndl,
 		const char* nspace);
-typedef pmix_status_t (*gds_ds_base_hndl_assemb_kvs_req_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_assemb_kvs_req(gds_ds_base_hndl_t *ds_hndl,
 		const pmix_proc_t *proc, pmix_list_t *kvs, pmix_buffer_t *buf, void *cbdata);
-typedef pmix_status_t (*gds_ds_base_hndl_accept_kvs_resp_fn_t)(gds_ds_base_hndl_t *ds_hndl,
+pmix_status_t pmix_common_dstor_accept_kvs_resp(gds_ds_base_hndl_t *ds_hndl,
 		pmix_buffer_t *buf);
 */
 

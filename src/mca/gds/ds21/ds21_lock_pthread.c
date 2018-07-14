@@ -268,10 +268,22 @@ pmix_status_t pmix_ds12_lock_wr_rel(pmix_common_dstor_lock_ctx_t lock_ctx)
     return PMIX_SUCCESS;
 }
 
-pmix_status_t _esh_pthread_lock_r(size_t session_idx)
+pmix_status_t pmix_ds12_lock_rd_get(pmix_common_dstor_lock_ctx_t lock_ctx)
 {
-    pthread_mutex_t *locks = _ESH_SESSION_pthread_mutex(session_idx);
-    uint32_t idx = _ESH_SESSION_lockidx(session_idx);
+    pthread_mutex_t *locks;
+    uint32_t idx;
+
+    ds21_lock_pthread_ctx_t *pthread_lock = (ds21_lock_pthread_ctx_t*)lock_ctx;
+    pmix_status_t rc;
+
+    if (NULL == pthread_lock) {
+        rc = PMIX_ERR_NOT_FOUND;
+        PMIX_ERROR_LOG(rc);
+        return rc;
+    }
+
+    locks = pthread_lock->mutex;
+    idx = pthread_lock->lock_idx;
 
     /* This mutex is only used to acquire the next one,
      * this is a barrier that server is using to let clients
@@ -294,10 +306,21 @@ pmix_status_t _esh_pthread_lock_r(size_t session_idx)
     return PMIX_SUCCESS;
 }
 
-pmix_status_t _esh_pthread_unlock_r(size_t session_idx)
+pmix_status_t pmix_ds12_lock_rd_rel(pmix_common_dstor_lock_ctx_t lock_ctx)
 {
-    pthread_mutex_t *locks = _ESH_SESSION_pthread_mutex(session_idx);
-    uint32_t idx = _ESH_SESSION_lockidx(session_idx);
+    ds21_lock_pthread_ctx_t *pthread_lock = (ds21_lock_pthread_ctx_t*)lock_ctx;
+    pmix_status_t rc;
+    pthread_mutex_t *locks;
+    uint32_t idx;
+
+    if (NULL == pthread_lock) {
+        rc = PMIX_ERR_NOT_FOUND;
+        PMIX_ERROR_LOG(rc);
+        return rc;
+    }
+
+    locks = pthread_lock->mutex;
+    idx = pthread_lock->lock_idx;
 
     /* Release the main lock */
     if (0 != pthread_mutex_unlock(&locks[2*idx + 1])) {

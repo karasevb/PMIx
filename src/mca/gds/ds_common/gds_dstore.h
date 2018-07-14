@@ -85,7 +85,7 @@ pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
                                 pmix_list_t *cbs,
                                 pmix_byte_object_t *bo);
 
-extern char *_base_path ;
+extern char *_base_path;
 extern uid_t _jobuid;
 extern char _setjobuid;
 extern ns_map_data_t * (*_esh_session_map_search)(const char *nspace);
