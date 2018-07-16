@@ -48,9 +48,7 @@ size_t _max_ns_num;
 size_t _meta_segment_size = 0;
 size_t _max_meta_elems;
 size_t _data_segment_size = 0;
-#if (defined(GDS_DS_VER)) && (GDS_DS_VER == 12)
 size_t _lock_segment_size = 0;
-#endif
 
 /* If _direct_mode is set, it means that we use linear search
  * along the array of rank meta info objects inside a meta segment

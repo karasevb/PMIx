@@ -26,27 +26,18 @@
 AM_CPPFLAGS = -DGDS_DS_VER=12
 
 headers = \
-        ../ds_common/gds_dstore.h \
-        gds_dstore.h \
-        ../ds_common/dstore_seg.h \
-        ../ds_common/dstore_session.h \
-        ../ds_common/dstore_lock.h \
-        ../ds_common/dstore_nspace.h
+        ds21_lock.h \
+        gds_dstore.h
 
 sources = \
-        ../ds_common/gds_dstore.c \
+        ds12_lock.c \
         gds_dstore.c \
-        gds_dstore_component.c \
-        ../ds_common/dstore_seg.c \
-        ../ds_common/dstore_session.c \
-        ../ds_common/dstore_nspace.c
+        gds_dstore_component.c
 
 if DSTORE_PTHREAD_LOCK
-headers += ds12_lock_pthread.h
 sources += ds12_lock_pthread.c
 else
 if DSTORE_FCNTL_LOCK
-headers += ds12_lock_fcntl.h
 sources += ds12_lock_fcntl.c
 endif
 endif
@@ -70,7 +61,8 @@ endif
 mcacomponentdir = $(pmixlibdir)
 mcacomponent_LTLIBRARIES = $(component)
 mca_gds_ds12_la_SOURCES = $(component_sources)
-mca_gds_ds12_la_LDFLAGS = -module -avoid-version
+mca_gds_ds12_la_LDFLAGS = -module -avoid-version \
+    $(PMIX_TOP_BUILDDIR)/src/mca/common/dstore/libmca_common_dstore.la
 
 noinst_LTLIBRARIES = $(lib)
 libmca_gds_ds12_la_SOURCES = $(lib_sources)
