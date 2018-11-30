@@ -16,6 +16,7 @@
 #include <getopt.h>
 #include <limits.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "pmi.h"
 
@@ -28,9 +29,26 @@
     ret;                                    \
 })
 
+typedef struct {
+    /* input */
+    int remote_cnt;
+    int local_cnt;
+    int *remote_ranks;
+    int *local_ranks;
+    /* output */
+    int get_loc_cnt;
+    int get_rem_cnt;
+    double *get_loc_time;
+    double *get_rem_time;
 
-int key_size = 100, key_count = 10, rank_shift;
+} get_thread_timings_t;
+
+int key_size = 100, key_count = 10, rank_shift, thread_count = 0;
 int direct_modex = 0, debug_on = 0;
+
+pthread_mutex_t get_thread_lock;
+pthread_barrier_t barrier;
+int thread_idx = 0;
 
 static void usage(const char *argv0)
 {
@@ -60,7 +78,7 @@ void parse_options(int argc, char **argv)
 
     while (1) {
         int c;
-        c = getopt_long(argc, argv, "hs:c:d0", long_options, NULL);
+        c = getopt_long(argc, argv, "hs:t:c:d0", long_options, NULL);
 
         if (c == -1)
             break;
@@ -74,6 +92,9 @@ void parse_options(int argc, char **argv)
             break;
         case 'c':
             key_count = atoi(optarg);
+            break;
+        case 't':
+            thread_count = atoi(optarg);
             break;
         case 'd':
             direct_modex = 1;
@@ -153,6 +174,112 @@ int get_mem_usage(double *_pss, double *_rss) {
     return 0;
 }
 
+void *_get_thread(void *arg)
+{
+    int my_idx;
+    int idx, cnt, my_key_count, start_cnt;
+    get_thread_timings_t *timing = (get_thread_timings_t*)arg;
+    char *key_name;
+    int get_loc_cnt = 0;
+    int get_rem_cnt = 0;
+
+    /* get my thread idx */
+    pthread_mutex_lock(&get_thread_lock);
+    my_idx = thread_idx;
+    thread_idx++;
+    pthread_mutex_unlock(&get_thread_lock);
+
+
+    /* compute my key count */
+    my_key_count = (key_count % thread_count) > my_idx ?
+                key_count / thread_count + 1 : key_count / thread_count;
+
+    /* compute my start counter */
+    for(idx = 0; idx < my_idx; idx++) {
+        start_cnt += (key_count % thread_count) > idx ?
+                    key_count / thread_count + 1 : key_count / thread_count;
+    }
+
+
+    pthread_mutex_lock(&get_thread_lock);
+    fprintf(stderr, "Thread %d started, key count %d, start count %d\n",
+            my_idx, my_key_count, start_cnt);
+    pthread_mutex_unlock(&get_thread_lock);
+
+    pthread_barrier_wait(&barrier);
+
+    for (cnt = start_cnt; cnt < start_cnt + my_key_count; cnt ++) {
+        int i;
+
+        for(i = 0; i < timing->remote_cnt; i++){
+            int rank = timing->remote_ranks[i], j;
+            int *key_val, key_size_new;
+            double start;
+            (void)asprintf(&key_name, "KEY-%d-remote-%d", rank, cnt);
+
+            start = GET_TS;
+            pmi_get_key_rem_noshift(rank, key_name, &key_val, &key_size_new);
+            timing->get_rem_time[my_idx] += GET_TS - start;
+            get_rem_cnt++;
+
+            if( key_size != key_size_new ){
+                fprintf(stderr,"%d: error in key %s sizes: %d vs %d\n",
+                        rank, key_name, key_size, key_size_new);
+                abort();
+            }
+
+            for(j=0; j < key_size; j++){
+                if( key_val[j] != rank * rank_shift + cnt ){
+                    fprintf(stderr, "%d: error in key %s value (byte %d)\n",
+                            rank, key_name, j);
+                    abort();
+                }
+            }
+            free(key_name);
+            free(key_val);
+        }
+        // check the returned data
+        for(i = 0; i < timing->local_cnt; i++){
+            int rank = timing->local_ranks[i], j;
+            int *key_val, key_size_new;
+            double start;
+            (void)asprintf(&key_name, "KEY-%d-local-%d", rank, cnt);
+
+            start = GET_TS;
+            pmi_get_key_loc_noshift(rank, key_name, &key_val, &key_size_new);
+            timing->get_loc_time[my_idx] += GET_TS - start;
+            get_loc_cnt++;
+
+            if( key_size != key_size_new ){
+                fprintf(stderr,"%d: error in key %s sizes: %d vs %d\n",
+                    rank, key_name, key_size, key_size_new);
+                abort();
+            }
+
+            for(j=0; j < key_size; j++){
+                if( key_val[j] != rank * rank_shift + cnt ){
+                    fprintf(stderr, "%d: error in key %s value (byte %d)",
+                        rank, key_name, j);
+                    abort();
+                }
+            }
+            free(key_name);
+            free(key_val);
+        }
+    }
+
+    pthread_barrier_wait(&barrier);
+
+    pthread_mutex_lock(&get_thread_lock);
+    timing->get_loc_cnt += get_loc_cnt;
+    timing->get_rem_cnt += get_rem_cnt;
+    fprintf(stderr, "Thread %d, get_loc_cnt %d\n",
+            my_idx, get_loc_cnt);
+    pthread_mutex_unlock(&get_thread_lock);
+
+    return NULL;
+}
+
 int main(int argc, char **argv)
 {
     int rc;
@@ -168,6 +295,7 @@ int main(int argc, char **argv)
     double mem_pss = 0.0, mem_rss = 0.0;
     char have_shmem;
     size_t shmem_job_info, shmem_all;
+    pthread_t *get_thread = NULL;
 
     parse_options(argc, argv);
 
@@ -237,67 +365,129 @@ int main(int argc, char **argv)
     pmi_fence( !direct_modex );
     fence_time += GET_TS - start;
 
+    /* multithread get mode */
+    if (thread_count) {
+        int tidx;
+
+        get_thread = (pthread_t*)malloc(sizeof(get_thread) * thread_count);
+        get_thread_timings_t get_thread_timings;
+
+        get_thread_timings.remote_cnt = remote_cnt;
+        get_thread_timings.local_cnt = local_cnt;
+        get_thread_timings.remote_ranks = remote_ranks;
+        get_thread_timings.local_ranks = local_ranks;
+
+        get_thread_timings.get_loc_cnt = 0;
+        get_thread_timings.get_rem_cnt = 0;
+
+        get_thread_timings.get_loc_time = (double*)malloc(sizeof(double) * thread_count);
+        get_thread_timings.get_rem_time = (double*)malloc(sizeof(double) * thread_count);
+        memset(get_thread_timings.get_loc_time, (double)0.0, sizeof(double) * thread_count);
+        memset(get_thread_timings.get_rem_time, (double)0.0, sizeof(double) * thread_count);
 
 
-    for (cnt=0; cnt < key_count; cnt++) {
-        int i;
-
-        for(i = 0; i < remote_cnt; i++){
-            int rank = remote_ranks[i], j;
-            int *key_val, key_size_new;
-            double start;
-            (void)asprintf(&key_name, "KEY-%d-remote-%d", rank, cnt);
-
-            start = GET_TS;
-            pmi_get_key_rem(rank, key_name, &key_val, &key_size_new);
-            get_rem_time += GET_TS - start;
-            get_rem_cnt++;
-
-            if( key_size != key_size_new ){
-                fprintf(stderr,"%d: error in key %s sizes: %d vs %d\n",
-                        rank, key_name, key_size, key_size_new);
-                abort();
-            }
-
-            for(j=0; j < key_size; j++){
-                if( key_val[j] != rank * rank_shift + cnt ){
-                    fprintf(stderr, "%d: error in key %s value (byte %d)\n",
-                            rank, key_name, j);
-                    abort();
-                }
-            }
-            free(key_name);
-            free(key_val);
+        if (0 != pthread_barrier_init(&barrier, NULL, thread_count)) {
+            fprintf(stderr, "Error pthread barrier init\n");
+            abort();
         }
 
-         // check the returned data
-        for(i = 0; i < local_cnt; i++){
-            int rank = local_ranks[i], j;
-            int *key_val, key_size_new;
-            double start;
-            (void)asprintf(&key_name, "KEY-%d-local-%d", rank, cnt);
+        if (0 != pthread_mutex_init(&get_thread_lock, NULL)) {
+            fprintf(stderr, "Error pthread mutex init\n");
+            abort();
+        }
 
-            start = GET_TS;
-            pmi_get_key_loc(rank, key_name, &key_val, &key_size_new);
-            get_loc_time += GET_TS - start;
-            get_loc_cnt++;
-
-            if( key_size != key_size_new ){
-                fprintf(stderr,"%d: error in key %s sizes: %d vs %d\n",
-                        rank, key_name, key_size, key_size_new);
+        for (tidx = 0; tidx < thread_count; tidx++) {
+            if (0 != pthread_create( &get_thread[tidx], NULL, _get_thread,
+                                     (void*) &get_thread_timings)) {
+                fprintf(stderr, "Error pthread_create\n");
                 abort();
             }
+        }
 
-            for(j=0; j < key_size; j++){
-                if( key_val[j] != rank * rank_shift + cnt ){
-                    fprintf(stderr, "%d: error in key %s value (byte %d)",
-                            rank, key_name, j);
+        for (tidx = 0; tidx < thread_count; tidx++) {
+            if (0 != pthread_join(get_thread[tidx], NULL)) {
+                fprintf(stderr, "Error pthread_join\n");
+                abort();
+            }
+        }
+
+        get_loc_cnt = get_thread_timings.get_loc_cnt;
+        get_rem_cnt = get_thread_timings.get_rem_cnt;
+
+        for (tidx = 0; tidx < thread_count; tidx++) {
+            if (get_rem_time < get_thread_timings.get_rem_time[tidx]) {
+                get_rem_time = get_thread_timings.get_rem_time[tidx];
+            }
+            if (get_loc_time < get_thread_timings.get_loc_time[tidx]) {
+                get_loc_time = get_thread_timings.get_loc_time[tidx];
+            }
+        }
+        fprintf(stderr, "get_loc_cnt %d\nget_rem_cnt %d\n", get_loc_cnt, get_rem_cnt);
+        fprintf(stderr, "get_loc_time %lf\nget_rem_time %lf\n", get_loc_time, get_rem_time);
+    /* direct get mode */
+    } else {
+        for (cnt=0; cnt < key_count; cnt++) {
+            int i;
+
+            for(i = 0; i < remote_cnt; i++){
+                int rank = remote_ranks[i], j;
+                int *key_val, key_size_new;
+                double start;
+                (void)asprintf(&key_name, "KEY-%d-remote-%d", rank, cnt);
+
+                start = GET_TS;
+                pmi_get_key_rem(rank, key_name, &key_val, &key_size_new);
+                get_rem_time += GET_TS - start;
+                get_rem_cnt++;
+
+                if( key_size != key_size_new ){
+                    fprintf(stderr,"%d: error in key %s sizes: %d vs %d\n",
+                            rank, key_name, key_size, key_size_new);
                     abort();
                 }
+
+                for(j=0; j < key_size; j++){
+                    if( key_val[j] != rank * rank_shift + cnt ){
+                        fprintf(stderr, "%d: error in key %s value (byte %d)\n",
+                                rank, key_name, j);
+                        abort();
+                    }
+                }
+                free(key_name);
+                free(key_val);
             }
-            free(key_name);
-            free(key_val);
+
+             // check the returned data
+            for(i = 0; i < local_cnt; i++){
+                int rank = local_ranks[i], j;
+                int *key_val, key_size_new;
+                double start;
+                (void)asprintf(&key_name, "KEY-%d-local-%d", rank, cnt);
+
+                start = GET_TS;
+                pmi_get_key_loc(rank, key_name, &key_val, &key_size_new);
+                get_loc_time += GET_TS - start;
+                get_loc_cnt++;
+
+                if( key_size != key_size_new ){
+                    fprintf(stderr,"%d: error in key %s sizes: %d vs %d\n",
+                            rank, key_name, key_size, key_size_new);
+                    abort();
+                }
+
+                for(j=0; j < key_size; j++){
+                    if( key_val[j] != rank * rank_shift + cnt ){
+                        fprintf(stderr, "%d: error in key %s value (byte %d)",
+                                rank, key_name, j);
+                        abort();
+                    }
+                }
+                free(key_name);
+                free(key_val);
+            }
         }
+        fprintf(stderr, "get_loc_cnt %d\nget_rem_cnt %d\n", get_loc_cnt, get_rem_cnt);
+        fprintf(stderr, "get_loc_time %lf\nget_rem_time %lf\n", get_loc_time, get_rem_time);
     }
 
     total_time = GET_TS - total_start;

@@ -281,6 +281,31 @@ void _get_key(int rank, char *key_name, int **key_val, int *key_size)
     PMIX_VALUE_RELEASE(val);
 }
 
+void _get_key_noshisft(int rank, char *key_name, int **key_val, int *key_size)
+{
+    pmix_proc_t proc;
+    pmix_value_t value, *val = &value;
+    int rc;
+
+    (void)strncpy(proc.nspace, this_proc.nspace, PMIX_MAX_NSLEN);
+    proc.rank = rank;
+    if (PMIX_SUCCESS != (rc = PMIx_Get_noshift(&proc, key_name, NULL, 0, &val))) {
+        fprintf(stderr, "Client ns %s rank %d: PMIx_Get %s failed: %d",
+                this_proc.nspace, this_proc.rank, key_name, rc);
+        abort();
+    }
+    if (PMIX_BYTE_OBJECT != val->type) {
+        fprintf(stderr, "Client ns %s rank %d: PMIx_Get %s returned wrong type: %d",
+                this_proc.nspace, this_proc.rank, key_name, val->type);
+        PMIX_VALUE_RELEASE(val);
+        abort();
+    }
+    *key_val = (int*)val->data.bo.bytes;
+    *key_size = val->data.bo.size / sizeof(int);
+    val->data.bo.bytes = NULL;
+    PMIX_VALUE_RELEASE(val);
+}
+
 void pmi_get_key_loc(int rank, char *key_name, int **key_val, int *key_size)
 {
     _get_key(rank, key_name, key_val, key_size);
@@ -289,6 +314,16 @@ void pmi_get_key_loc(int rank, char *key_name, int **key_val, int *key_size)
 void pmi_get_key_rem(int rank, char *key_name, int **key_val, int *key_size)
 {
     _get_key(rank, key_name, key_val, key_size);
+}
+
+void pmi_get_key_loc_noshift(int rank, char *key_name, int **key_val, int *key_size)
+{
+    _get_key_noshisft(rank, key_name, key_val, key_size);
+}
+
+void pmi_get_key_rem_noshift(int rank, char *key_name, int **key_val, int *key_size)
+{
+    _get_key_noshisft(rank, key_name, key_val, key_size);
 }
 
 double pmi_get_double(int rank, char *key_name)
