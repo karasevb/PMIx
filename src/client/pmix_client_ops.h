@@ -52,6 +52,8 @@ typedef struct {
     /* IOF output sinks */
     pmix_iof_sink_t iof_stdout;
     pmix_iof_sink_t iof_stderr;
+    // enable client get fastpath
+    bool get_fastpath;
 } pmix_client_globals_t;
 
 PMIX_EXPORT extern pmix_client_globals_t pmix_client_globals;
