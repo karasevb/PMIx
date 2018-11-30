@@ -1,16 +1,16 @@
-PMIX_BASE = /tmp/artemp/pmix
-SLURM_BASE = /tmp/artemp/slurm
+PMIX_BASE = /home/user/pmix/v3.0/install
+SLURM_BASE = /sandbox/slurm
 
 PMIX_INC= -I$(PMIX_BASE)/include/
-PMIX_LIB= -L$(PMIX_BASE)/lib/ -L$(PMIX_BASE)/lib64/ -lpmix
+PMIX_LIB= -L$(PMIX_BASE)/lib/ -L$(PMIX_BASE)/lib64/ -lpmix -lpthread -Wl,-rpath=/home/user/pmix/v3.0/install/lib -g -O0
 
 PMI2_BASE = $(SLURM_BASE)
 PMI2_INC= -I$(PMI2_BASE)/include/
-PMI2_LIB= -L$(PMI2_BASE)/lib/ -L$(PMI2_BASE)/lib64/ -lpmi2
+PMI2_LIB= -L$(PMI2_BASE)/lib/ -L$(PMI2_BASE)/lib64/ -lpmi2 -lpthread
 
 PMI1_BASE = $(SLURM_BASE)
 PMI1_INC= -I$(PMI1_BASE)/include/
-PMI1_LIB= -L$(PMI1_BASE)/lib/ -L$(PMI1_BASE)/lib64/ -lpmi
+PMI1_LIB= -L$(PMI1_BASE)/lib/ -L$(PMI1_BASE)/lib64/ -lpmi -lpthread
 
 CFLAGS = -O2 -g
 

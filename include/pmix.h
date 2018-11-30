@@ -212,6 +212,18 @@ PMIX_EXPORT pmix_status_t PMIx_Get_nb(const pmix_proc_t *proc, const char key[],
                                       const pmix_info_t info[], size_t ninfo,
                                       pmix_value_cbfunc_t cbfunc, void *cbdata);
 
+PMIX_EXPORT pmix_status_t PMIx_Get_noshift(const pmix_proc_t *proc, const char key[],
+                                   const pmix_info_t info[], size_t ninfo,
+                                   pmix_value_t **val);
+
+/* A non-blocking operation version of PMIx_Get - the callback function will
+ * be executed once the specified data has been _PMIx_Put_
+ * by the identified process and retrieved by the local server. The info
+ * array is used as described above for the blocking form of this call. */
+PMIX_EXPORT pmix_status_t PMIx_Get_nb_noshift(const pmix_proc_t *proc, const char key[],
+                                      const pmix_info_t info[], size_t ninfo,
+                                      pmix_value_cbfunc_t cbfunc, void *cbdata);
+
 
 /* Publish the data in the info array for lookup. By default,
  * the data will be published into the PMIX_SESSION range and

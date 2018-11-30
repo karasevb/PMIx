@@ -433,6 +433,7 @@ static pmix_status_t dstore_store_modex(struct pmix_nspace_t *nspace,
 
 pmix_gds_base_module_t pmix_ds12_module = {
     .name = "ds12",
+    .is_tsafe = true,
     .init = dstore_init,
     .finalize = dstore_finalize,
     .assign_module = dstore_assign_module,
