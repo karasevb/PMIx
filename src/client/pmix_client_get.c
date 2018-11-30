@@ -75,6 +75,11 @@ static void _getnb_cbfunc(struct pmix_peer_t *pr,
 
 static void _value_cbfunc(pmix_status_t status, pmix_value_t *kv, void *cbdata);
 
+static void _getfn_respond(pmix_status_t rc, pmix_value_t **val,
+                            pmix_cb_t *cb);
+
+static pmix_status_t _getfn_fastpath(void *cbdata);
+
 
 PMIX_EXPORT pmix_status_t PMIx_Get(const pmix_proc_t *proc,
                                    const pmix_key_t key,
@@ -193,6 +198,14 @@ PMIX_EXPORT pmix_status_t PMIx_Get_nb(const pmix_proc_t *proc, const pmix_key_t 
     cb->ninfo = ninfo;
     cb->cbfunc.valuefn = cbfunc;
     cb->cbdata = cbdata;
+
+    /* try to get data directly, without threadshift */
+    if (PMIX_LIKELY(true == pmix_client_globals.get_fastpath)) {
+        if (PMIX_SUCCESS == _getfn_fastpath(cb)) {
+            return PMIX_SUCCESS;
+        }
+    }
+
     PMIX_THREADSHIFT(cb, _getnbfn);
 
     return PMIX_SUCCESS;
@@ -473,6 +486,83 @@ static void infocb(pmix_status_t status,
     }
 }
 
+static void _getfn_respond(pmix_status_t rc, pmix_value_t **val, pmix_cb_t *cb)
+{
+    char *tmp;
+     /* if a callback was provided, execute it */
+    if (NULL != cb->cbfunc.valuefn) {
+        if (NULL != *val) {
+            /* if this is a compressed string, then uncompress it */
+            if (PMIX_COMPRESSED_STRING == (*val)->type) {
+                pmix_util_uncompress_string(&tmp,
+                                            (uint8_t*)(*val)->data.bo.bytes,
+                                            (*val)->data.bo.size);
+                if (NULL == tmp) {
+                    PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
+                    rc = PMIX_ERR_NOMEM;
+                    PMIX_VALUE_RELEASE(*val);
+                    *val = NULL;
+                } else {
+                    PMIX_VALUE_DESTRUCT(*val);
+                    (*val)->data.string = tmp;
+                    (*val)->type = PMIX_STRING;
+                }
+            }
+        }
+        cb->cbfunc.valuefn(rc, *val, cb->cbdata);
+    }
+    if (NULL != *val) {
+        PMIX_VALUE_RELEASE(*val);
+    }
+    return;
+}
+
+static pmix_status_t _getfn_fastpath(void *cbdata)
+{
+    pmix_cb_t *cb = (pmix_cb_t*)cbdata;
+    pmix_value_t *val = NULL;
+    pmix_status_t rc = PMIX_SUCCESS;
+    size_t n;
+    pmix_proc_t proc;
+
+    /* set the proc object identifier */
+    (void)strncpy(proc.nspace, cb->pname.nspace, PMIX_MAX_NSLEN);
+    proc.rank = cb->pname.rank;
+     /* scan the incoming directives */
+    if (NULL != cb->info) {
+        for (n=0; n < cb->ninfo; n++) {
+            if (0 == strncmp(cb->info[n].key, PMIX_DATA_SCOPE, PMIX_MAX_KEYLEN)) {
+                cb->scope = cb->info[n].value.data.scope;
+            }
+        }
+    }
+    cb->proc = &proc;
+    cb->copy = true;
+    PMIX_GDS_FETCH_IS_TSAFE(rc, pmix_globals.mypeer);
+    if (PMIX_SUCCESS == rc) {
+        PMIX_GDS_FETCH_KV(rc, pmix_globals.mypeer, cb);
+        if (PMIX_SUCCESS == rc) {
+            goto respond;
+        }
+    }
+    PMIX_GDS_FETCH_IS_TSAFE(rc, pmix_client_globals.myserver);
+    if (PMIX_SUCCESS == rc) {
+        PMIX_GDS_FETCH_KV(rc, pmix_client_globals.myserver, cb);
+        if (PMIX_SUCCESS == rc) {
+            goto respond;
+        }
+    }
+    return rc;
+
+  respond:
+    rc = process_values(&val, cb);
+    if (PMIX_SUCCESS == rc) {
+        _getfn_respond(rc, &val, cb);
+        PMIX_RELEASE(cb);
+    }
+    return rc;
+}
+
 static void _getnbfn(int fd, short flags, void *cbdata)
 {
     pmix_cb_t *cb = (pmix_cb_t*)cbdata;
@@ -481,7 +571,6 @@ static void _getnbfn(int fd, short flags, void *cbdata)
     pmix_value_t *val = NULL;
     pmix_status_t rc;
     size_t n;
-    char *tmp;
     pmix_proc_t proc;
     bool optional = false;
     bool immediate = false;
@@ -606,28 +695,7 @@ static void _getnbfn(int fd, short flags, void *cbdata)
     }
 
   respond:
-    /* if a callback was provided, execute it */
-    if (NULL != cb->cbfunc.valuefn) {
-        if (NULL != val)  {
-            /* if this is a compressed string, then uncompress it */
-            if (PMIX_COMPRESSED_STRING == val->type) {
-                pmix_util_uncompress_string(&tmp, (uint8_t*)val->data.bo.bytes, val->data.bo.size);
-                if (NULL == tmp) {
-                    PMIX_ERROR_LOG(PMIX_ERR_NOMEM);
-                    rc = PMIX_ERR_NOMEM;
-                    PMIX_VALUE_RELEASE(val);
-                    val = NULL;
-                } else {
-                    PMIX_VALUE_DESTRUCT(val);
-                    PMIX_VAL_ASSIGN(val, string, tmp);
-                }
-            }
-        }
-        cb->cbfunc.valuefn(rc, val, cb->cbdata);
-    }
-    if (NULL != val) {
-        PMIX_VALUE_RELEASE(val);
-    }
+    _getfn_respond(rc, &val, cb);
     PMIX_RELEASE(cb);
     return;
 
