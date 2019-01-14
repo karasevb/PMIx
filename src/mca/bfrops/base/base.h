@@ -651,9 +651,13 @@ PMIX_EXPORT pmix_status_t pmix_bfrops_base_print_envar(char **output, char *pref
  * Common helper functions
  */
 
-PMIX_EXPORT int pack_size(uint64_t size, uint8_t out_buf[9]);
+PMIX_EXPORT int pmix_pack_base7_uint64(uint64_t size, uint8_t out_buf[9]);
+PMIX_EXPORT int pmix_pack_base7_uint32(uint32_t size, uint8_t out_buf[5]);
+PMIX_EXPORT int pmix_pack_base7_uint16(uint16_t size, uint8_t out_buf[3]);
 
-PMIX_EXPORT uint64_t unpack_size(uint8_t in_buf[]);
+PMIX_EXPORT int pmix_unpack_base7_uint64(uint8_t in_buf[], uint64_t *val);
+PMIX_EXPORT int pmix_unpack_base7_uint32(uint8_t in_buf[], uint32_t *val);
+PMIX_EXPORT int pmix_unpack_base7_uint16(uint8_t in_buf[], uint16_t *val);
 
 PMIX_EXPORT char* pmix_bfrop_buffer_extend(pmix_buffer_t *bptr, size_t bytes_to_add);
 

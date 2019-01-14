@@ -328,21 +328,32 @@ pmix_status_t pmix_bfrops_base_unpack_int16(pmix_buffer_t *buffer, void *dest,
 {
     int32_t i;
     uint16_t tmp, *desttmp = (uint16_t*) dest;
+    int tmp_size;
 
     pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
                         "pmix_bfrop_unpack_int16 * %d\n", (int)*num_vals);
 
     /* check to see if there's enough data in buffer */
+    /* temporarily disable this check*/
+    /*
     if (pmix_bfrop_too_small(buffer, (*num_vals)*sizeof(tmp))) {
+        return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
+    }
+    */
+
+    /* stub to identify that unpacking is ended */
+    if (buffer->pack_ptr == buffer->unpack_ptr) {
         return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
     }
 
     /* unpack the data */
     for (i = 0; i < (*num_vals); ++i) {
-        memcpy( &(tmp), buffer->unpack_ptr, sizeof(tmp) );
-        tmp = pmix_ntohs(tmp);
+        tmp_size = pmix_unpack_base7_uint16(buffer->unpack_ptr, &tmp);
+        //memcpy( &(tmp), buffer->unpack_ptr, sizeof(tmp) );
+        //tmp = pmix_ntohs(tmp);
+        //pmix_output(0, "unpack val %u, pack_size %d", tmp, tmp_size);
         memcpy(&desttmp[i], &tmp, sizeof(tmp));
-        buffer->unpack_ptr += sizeof(tmp);
+        buffer->unpack_ptr += tmp_size;
     }
 
     return PMIX_SUCCESS;
@@ -353,21 +364,30 @@ pmix_status_t pmix_bfrops_base_unpack_int32(pmix_buffer_t *buffer, void *dest,
 {
     int32_t i;
     uint32_t tmp, *desttmp = (uint32_t*) dest;
+    int tmp_size;
 
     pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
                         "pmix_bfrop_unpack_int32 * %d\n", (int)*num_vals);
 
     /* check to see if there's enough data in buffer */
+    /* temporarily disable this check*/
+    /*
     if (pmix_bfrop_too_small(buffer, (*num_vals)*sizeof(tmp))) {
+        return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
+    }
+    */
+
+    /* stub to identify that unpacking is ended */
+    if (buffer->pack_ptr == buffer->unpack_ptr) {
         return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
     }
 
     /* unpack the data */
     for (i = 0; i < (*num_vals); ++i) {
-        memcpy( &(tmp), buffer->unpack_ptr, sizeof(tmp) );
-        tmp = ntohl(tmp);
+        tmp_size = pmix_unpack_base7_uint32(buffer->unpack_ptr, &tmp);
+        //pmix_output(0, "unpack val %u, pack_size %d", tmp, tmp_size);
         memcpy(&desttmp[i], &tmp, sizeof(tmp));
-        buffer->unpack_ptr += sizeof(tmp);
+        buffer->unpack_ptr += tmp_size;
     }
 
     return PMIX_SUCCESS;
@@ -384,21 +404,30 @@ pmix_status_t pmix_bfrops_base_unpack_int64(pmix_buffer_t *buffer, void *dest,
 {
     int32_t i;
     uint64_t tmp, *desttmp = (uint64_t*) dest;
+    int unpack_sz;
 
     pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
                         "pmix_bfrop_unpack_int64 * %d\n", (int)*num_vals);
 
     /* check to see if there's enough data in buffer */
+    /* temporarily disable this check*/
+    /*
     if (pmix_bfrop_too_small(buffer, (*num_vals)*sizeof(tmp))) {
+        return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
+    }*/
+
+    /* stub to identify that unpacking is ended */
+    if (buffer->pack_ptr == buffer->unpack_ptr) {
         return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
     }
 
     /* unpack the data */
     for (i = 0; i < (*num_vals); ++i) {
-        memcpy( &(tmp), buffer->unpack_ptr, sizeof(tmp) );
-        tmp = pmix_ntoh64(tmp);
+        unpack_sz = pmix_unpack_base7_uint64(buffer->unpack_ptr, &tmp);
+        //pmix_output(0, "unpack val %lu, pack_size %d", tmp, unpack_sz);
+        //tmp = pmix_ntoh64(tmp);
         memcpy(&desttmp[i], &tmp, sizeof(tmp));
-        buffer->unpack_ptr += sizeof(tmp);
+        buffer->unpack_ptr += unpack_sz;
     }
 
     return PMIX_SUCCESS;
@@ -564,9 +593,18 @@ pmix_status_t pmix_bfrops_base_unpack_status(pmix_buffer_t *buffer, void *dest,
                          "pmix_bfrop_unpack_status * %d\n", (int)*num_vals);
 
     /* check to see if there's enough data in buffer */
+    /* temporarily disable this check*/
+    /*
     if (pmix_bfrop_too_small(buffer, (*num_vals)*(sizeof(pmix_status_t)))) {
         return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
     }
+    */
+
+    /* stub to identify that unpacking is ended */
+    if (buffer->pack_ptr == buffer->unpack_ptr) {
+     return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
+    }
+
 
     /* unpack the data */
     return pmix_bfrops_base_unpack_int32(buffer, dest, num_vals, PMIX_INT32);

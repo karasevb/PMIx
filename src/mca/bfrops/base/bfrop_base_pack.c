@@ -43,6 +43,12 @@ pmix_status_t pmix_bfrops_base_pack(pmix_pointer_array_t *regtypes,
 
     /* check for error */
     if (NULL == buffer || NULL == src) {
+        {
+            int delay = 1;
+            while (delay) {
+                sleep(1);
+            }
+        }
         PMIX_ERROR_LOG(PMIX_ERR_BAD_PARAM);
         return PMIX_ERR_BAD_PARAM;
     }
@@ -244,22 +250,41 @@ pmix_status_t pmix_bfrops_base_pack_int16(pmix_buffer_t *buffer, const void *src
     int32_t i;
     uint16_t tmp, *srctmp = (uint16_t*) src;
     char *dst;
+    int tmp_size;
+    uint8_t tmp_buf[3];
 
     pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
                         "pmix_bfrops_base_pack_int16 * %d\n", num_vals);
 
-    /* check to see if buffer needs extending */
-    if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, num_vals*sizeof(tmp)))) {
-        return PMIX_ERR_OUT_OF_RESOURCE;
-    }
-
     for (i = 0; i < num_vals; ++i) {
-        tmp = pmix_htons(srctmp[i]);
-        memcpy(dst, &tmp, sizeof(tmp));
-        dst += sizeof(tmp);
+        //tmp = pmix_htons(srctmp[i]);
+        tmp = srctmp[i];
+        tmp_size = pmix_pack_base7_uint16(tmp, tmp_buf);
+        /* check to see if buffer needs extending */
+        if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, tmp_size))) {
+            return PMIX_ERR_OUT_OF_RESOURCE;
+        }
+        memcpy(dst, tmp_buf, sizeof(uint8_t) * tmp_size);
+        //pmix_output(0, "pack val %u, pack_size %d", tmp, tmp_size);
+
+        /* pack check */
+        {
+            uint16_t tmp2 = 0;
+            int unpack_sz = pmix_unpack_base7_uint16(dst, &tmp2);
+            if (tmp_size != unpack_sz) {
+                pmix_output(0, "pack16 size error, size %d, expected %d", unpack_sz, tmp_size);
+            }
+            if (tmp != tmp2) {
+                pmix_output(0, "pack16 value error, val %lu, expected %lu", tmp2, tmp);
+            }
+        }
+
+        dst += tmp_size;
+        buffer->pack_ptr += tmp_size;
+        buffer->bytes_used += tmp_size;
     }
-    buffer->pack_ptr += num_vals * sizeof(tmp);
-    buffer->bytes_used += num_vals * sizeof(tmp);
+    //buffer->pack_ptr += num_vals * sizeof(tmp);
+    //buffer->bytes_used += num_vals * sizeof(tmp);
 
     return PMIX_SUCCESS;
 }
@@ -273,21 +298,38 @@ pmix_status_t pmix_bfrops_base_pack_int32(pmix_buffer_t *buffer, const void *src
     int32_t i;
     uint32_t tmp, *srctmp = (uint32_t*) src;
     char *dst;
+    int tmp_size;
+    uint8_t tmp_buf[5];
 
     pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
                         "pmix_bfrops_base_pack_int32 * %d\n", num_vals);
 
-    /* check to see if buffer needs extending */
-    if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, num_vals*sizeof(tmp)))) {
-        return PMIX_ERR_OUT_OF_RESOURCE;
-    }
     for (i = 0; i < num_vals; ++i) {
-        tmp = htonl(srctmp[i]);
-        memcpy(dst, &tmp, sizeof(tmp));
-        dst += sizeof(tmp);
+        //tmp = htonl(srctmp[i]);
+        tmp = srctmp[i];
+        tmp_size = pmix_pack_base7_uint32(srctmp[i], tmp_buf);
+        /* check to see if buffer needs extending */
+        if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, tmp_size))) {
+            return PMIX_ERR_OUT_OF_RESOURCE;
+        }
+        memcpy(dst, tmp_buf, sizeof(uint8_t) * tmp_size);
+        //pmix_output(0, "pack val %u, pack_size %d", tmp, tmp_size);
+        /* pack check */
+        {
+            uint32_t tmp2;
+            int unpack_sz = pmix_unpack_base7_uint32(dst, &tmp2);
+            if (tmp_size != unpack_sz) {
+                pmix_output(0, "pack32 size error, size %d, expected %d", unpack_sz, tmp_size);
+            }
+            if (tmp != tmp2) {
+                pmix_output(0, "pack32 value error, val %lu, expected %lu", tmp2, tmp);
+            }
+        }
+
+        dst += tmp_size;
+        buffer->pack_ptr += tmp_size;
+        buffer->bytes_used += tmp_size;
     }
-    buffer->pack_ptr += num_vals * sizeof(tmp);
-    buffer->bytes_used += num_vals * sizeof(tmp);
 
     return PMIX_SUCCESS;
 }
@@ -301,24 +343,43 @@ pmix_status_t pmix_bfrops_base_pack_int64(pmix_buffer_t *buffer, const void *src
     int32_t i;
     uint64_t tmp, tmp2;
     char *dst;
-    size_t bytes_packed = num_vals * sizeof(tmp);
+    //size_t bytes_packed = 0;
+    int tmp_size;
+    uint8_t tmp_buf[9];
 
     pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
                         "pmix_bfrops_base_pack_int64 * %d\n", num_vals);
 
-    /* check to see if buffer needs extending */
-    if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, bytes_packed))) {
-        return PMIX_ERR_OUT_OF_RESOURCE;
-    }
-
     for (i = 0; i < num_vals; ++i) {
         memcpy(&tmp2, (char *)src+i*sizeof(uint64_t), sizeof(uint64_t));
-        tmp = pmix_hton64(tmp2);
-        memcpy(dst, &tmp, sizeof(tmp));
-        dst += sizeof(tmp);
+        //tmp = pmix_hton64(tmp2);
+        tmp_size = pmix_pack_base7_uint64(tmp2, tmp_buf);
+
+        /* check to see if buffer needs extending */
+        if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, tmp_size))) {
+            return PMIX_ERR_OUT_OF_RESOURCE;
+        }
+
+        //pmix_output(0, "pack val %lu, pack_size %d", tmp2, tmp_size);
+        memcpy(dst, tmp_buf, sizeof(uint8_t) *tmp_size);
+
+        /* pack check */
+        {
+            int unpack_sz = pmix_unpack_base7_uint64(tmp_buf, &tmp);
+            if (tmp_size != unpack_sz) {
+                pmix_output(0, "pack size error, size %d, expected %d", unpack_sz, tmp_size);
+            }
+            if (tmp != tmp2) {
+                pmix_output(0, "pack value error, val %lu, expected %lu", tmp, tmp2);
+            }
+        }
+
+        dst += tmp_size;
+        buffer->pack_ptr += tmp_size;
+        buffer->bytes_used += tmp_size;
     }
-    buffer->pack_ptr += bytes_packed;
-    buffer->bytes_used += bytes_packed;
+    //buffer->pack_ptr += bytes_packed;
+    //buffer->bytes_used += bytes_packed;
 
     return PMIX_SUCCESS;
 }

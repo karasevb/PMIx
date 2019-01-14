@@ -57,7 +57,7 @@ PMIX_EXPORT pmix_status_t pmix_value_xfer(pmix_value_t *dest,
 #define BASE7_SHIFT 7
 #define BASE7_CONT_FLAG (1<<7)
 
-int pack_size(uint64_t size, uint8_t out_buf[9])
+int pmix_pack_base7_uint64(uint64_t size, uint8_t out_buf[9])
 {
     uint64_t tmp = size;
     int idx = 0;
@@ -77,9 +77,49 @@ int pack_size(uint64_t size, uint8_t out_buf[9])
     return idx;
 }
 
-uint64_t unpack_size(uint8_t in_buf[])
+int pmix_pack_base7_uint32(uint32_t value, uint8_t out_buf[5])
 {
-    uint64_t size = 0, shift = 0;
+    uint32_t tmp = value;
+    int idx = 0;
+    do {
+        uint8_t val = tmp & BASE7_MASK;
+        tmp >>= BASE7_SHIFT;
+        if( UNLIKELY(tmp) ) {
+            val |= BASE7_CONT_FLAG;
+        }
+        out_buf[idx++] = val;
+    } while(tmp && idx < 8);
+
+    /* If we have leftover (VERY unlikely) */
+    if (UNLIKELY(8 == idx && tmp)) {
+        out_buf[idx++] = tmp;
+    }
+    return idx;
+}
+
+int pmix_pack_base7_uint16(uint16_t size, uint8_t out_buf[3])
+{
+    uint16_t tmp = size;
+    int idx = 0;
+    do {
+        uint8_t val = tmp & BASE7_MASK;
+        tmp >>= BASE7_SHIFT;
+        if( UNLIKELY(tmp) ) {
+            val |= BASE7_CONT_FLAG;
+        }
+        out_buf[idx++] = val;
+    } while(tmp && idx < 8);
+
+    /* If we have leftover (VERY unlikely) */
+    if (UNLIKELY(8 == idx && tmp)) {
+        out_buf[idx++] = tmp;
+    }
+    return idx;
+}
+
+int pmix_unpack_base7_uint64(uint8_t in_buf[], uint64_t *out_val)
+{
+    uint64_t shift = 0, size = 0;
     int idx = 0;
     uint8_t val = 0;
     do {
@@ -93,7 +133,48 @@ uint64_t unpack_size(uint8_t in_buf[])
         val = in_buf[idx++];
         size = size + ((uint64_t)val << shift);
     }
-    return size;
+    *out_val = size;
+    return idx;
+}
+
+int pmix_unpack_base7_uint32(uint8_t in_buf[], uint32_t *out_val)
+{
+    uint32_t shift = 0, size = 0;
+    int idx = 0;
+    uint8_t val = 0;
+    do {
+        val = in_buf[idx++];
+        size = size + (((uint64_t)val & BASE7_MASK) << shift);
+        shift += BASE7_SHIFT;
+    } while( UNLIKELY((val & BASE7_CONT_FLAG) && (idx < 8)) );
+
+    /* If we have leftover (VERY unlikely) */
+    if (UNLIKELY(8 == idx && (val & BASE7_CONT_FLAG))) {
+        val = in_buf[idx++];
+        size = size + ((uint64_t)val << shift);
+    }
+    *out_val = size;
+    return idx;
+}
+
+int pmix_unpack_base7_uint16(uint8_t in_buf[], uint16_t *out_val)
+{
+    uint16_t shift = 0, size = 0;
+    int idx = 0;
+    uint8_t val = 0;
+    do {
+        val = in_buf[idx++];
+        size = size + (((uint64_t)val & BASE7_MASK) << shift);
+        shift += BASE7_SHIFT;
+    } while( UNLIKELY((val & BASE7_CONT_FLAG) && (idx < 8)) );
+
+    /* If we have leftover (VERY unlikely) */
+    if (UNLIKELY(8 == idx && (val & BASE7_CONT_FLAG))) {
+        val = in_buf[idx++];
+        size = size + ((uint64_t)val << shift);
+    }
+    *out_val = size;
+    return idx;
 }
 
 void pmix_bfrops_base_value_load(pmix_value_t *v, const void *data,
@@ -776,15 +857,21 @@ pmix_status_t pmix_bfrop_store_data_type(pmix_buffer_t *buffer, pmix_data_type_t
 {
     uint16_t tmp;
     char *dst;
+    int tmp_size;
+    uint8_t tmp_buf[3];
+
+    tmp = (uint16_t)type;
+    tmp_size = pmix_pack_base7_uint16(tmp, tmp_buf);
 
     /* check to see if buffer needs extending */
-     if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, sizeof(tmp)))) {
+    if (NULL == (dst = pmix_bfrop_buffer_extend(buffer, tmp_size))) {
         return PMIX_ERR_OUT_OF_RESOURCE;
     }
-    tmp = pmix_htons(type);
-    memcpy(dst, &tmp, sizeof(tmp));
-    buffer->pack_ptr += sizeof(tmp);
-    buffer->bytes_used += sizeof(tmp);
+
+    memcpy(dst, tmp_buf, sizeof(uint8_t) * tmp_size);
+
+    buffer->pack_ptr += tmp_size;
+    buffer->bytes_used += tmp_size;
 
     return PMIX_SUCCESS;
 }
@@ -792,17 +879,25 @@ pmix_status_t pmix_bfrop_store_data_type(pmix_buffer_t *buffer, pmix_data_type_t
 pmix_status_t pmix_bfrop_get_data_type(pmix_buffer_t *buffer, pmix_data_type_t *type)
 {
     uint16_t tmp;
+    int tmp_size;
 
     /* check to see if there's enough data in buffer */
+    /* temporarily disable this check*/
+    /*
     if (pmix_bfrop_too_small(buffer, sizeof(tmp))) {
+        return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
+    }
+    */
+
+    /* stub to identify that unpacking is ended */
+    if (buffer->pack_ptr == buffer->unpack_ptr) {
         return PMIX_ERR_UNPACK_READ_PAST_END_OF_BUFFER;
     }
 
     /* unpack the data */
-    memcpy(&tmp, buffer->unpack_ptr, sizeof(tmp));
-    tmp = pmix_ntohs(tmp);
+    tmp_size = pmix_unpack_base7_uint16(buffer->unpack_ptr, &tmp);
     memcpy(type, &tmp, sizeof(tmp));
-    buffer->unpack_ptr += sizeof(tmp);
+    buffer->unpack_ptr += tmp_size;
 
     return PMIX_SUCCESS;
 }
