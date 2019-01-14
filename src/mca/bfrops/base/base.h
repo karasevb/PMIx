@@ -651,6 +651,10 @@ PMIX_EXPORT pmix_status_t pmix_bfrops_base_print_envar(char **output, char *pref
  * Common helper functions
  */
 
+PMIX_EXPORT int pack_size(uint64_t size, uint8_t out_buf[9]);
+
+PMIX_EXPORT uint64_t unpack_size(uint8_t in_buf[]);
+
 PMIX_EXPORT char* pmix_bfrop_buffer_extend(pmix_buffer_t *bptr, size_t bytes_to_add);
 
 PMIX_EXPORT bool pmix_bfrop_too_small(pmix_buffer_t *buffer, size_t bytes_reqd);

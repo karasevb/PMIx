@@ -51,6 +51,51 @@ PMIX_EXPORT pmix_status_t pmix_value_xfer(pmix_value_t *dest,
     return pmix_bfrops_base_value_xfer(dest, src);
 }
 
+#define UNLIKELY(x) (__builtin_expect(!!(x), 0))
+
+#define BASE7_MASK ((1<<7) - 1)
+#define BASE7_SHIFT 7
+#define BASE7_CONT_FLAG (1<<7)
+
+int pack_size(uint64_t size, uint8_t out_buf[9])
+{
+    uint64_t tmp = size;
+    int idx = 0;
+    do {
+        uint8_t val = tmp & BASE7_MASK;
+        tmp >>= BASE7_SHIFT;
+        if( UNLIKELY(tmp) ) {
+            val |= BASE7_CONT_FLAG;
+        }
+        out_buf[idx++] = val;
+    } while(tmp && idx < 8);
+
+    /* If we have leftover (VERY unlikely) */
+    if (UNLIKELY(8 == idx && tmp)) {
+        out_buf[idx++] = tmp;
+    }
+    return idx;
+}
+
+uint64_t unpack_size(uint8_t in_buf[])
+{
+    uint64_t size = 0, shift = 0;
+    int idx = 0;
+    uint8_t val = 0;
+    do {
+        val = in_buf[idx++];
+        size = size + (((uint64_t)val & BASE7_MASK) << shift);
+        shift += BASE7_SHIFT;
+    } while( UNLIKELY((val & BASE7_CONT_FLAG) && (idx < 8)) );
+
+    /* If we have leftover (VERY unlikely) */
+    if (UNLIKELY(8 == idx && (val & BASE7_CONT_FLAG))) {
+        val = in_buf[idx++];
+        size = size + ((uint64_t)val << shift);
+    }
+    return size;
+}
+
 void pmix_bfrops_base_value_load(pmix_value_t *v, const void *data,
                                  pmix_data_type_t type)
 {
