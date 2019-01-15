@@ -1234,6 +1234,8 @@ static pmix_status_t _hash_store_modex(void * cbdata,
      * the rank followed by pmix_kval_t's. The list of callbacks
      * contains all local participants. */
 
+    PMIX_PROC_CONSTRUCT(&proc);
+
     /* setup the byte object for unpacking */
     PMIX_CONSTRUCT(&pbkt, pmix_buffer_t);
     /* the next step unfortunately NULLs the byte object's
@@ -1241,7 +1243,7 @@ static pmix_status_t _hash_store_modex(void * cbdata,
     PMIX_LOAD_BUFFER(pmix_globals.mypeer, &pbkt, bo->bytes, bo->size);
     /* unload the proc that provided this data */
     cnt = 1;
-    PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &proc, &cnt, PMIX_PROC);
+    PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &proc.rank, &cnt, PMIX_PROC_RANK);
     if (PMIX_SUCCESS != rc) {
         PMIX_ERROR_LOG(rc);
         bo->bytes = pbkt.base_ptr;
@@ -1250,6 +1252,10 @@ static pmix_status_t _hash_store_modex(void * cbdata,
         PMIX_DESTRUCT(&pbkt);
         return rc;
     }
+
+    pmix_namespace_t *_ns = pmix_list_get_last(&pmix_server_globals.nspaces);
+    pmix_strncpy(proc.nspace, _ns->nspace, PMIX_MAX_NSLEN);
+
     /* unpack the remaining values until we hit the end of the buffer */
     cnt = 1;
     kv = PMIX_NEW(pmix_kval_t);

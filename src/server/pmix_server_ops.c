@@ -489,6 +489,22 @@ static void fence_timeout(int sd, short args, void *cbdata)
     PMIX_RELEASE(cd);
 }
 
+static int _local_cbs_proc_compare(pmix_list_item_t **a, pmix_list_item_t **b) {
+    pmix_name_t pname1 = ((pmix_server_caddy_t *)*a)->peer->info->pname;
+    pmix_name_t pname2 = ((pmix_server_caddy_t *)*b)->peer->info->pname;
+
+    if (0 == strcmp(pname1.nspace, pname2.nspace)) {
+        if (pname1.rank > pname2.rank) {
+            return 1;
+        } else {
+            return -1;
+        }
+    }
+    // TODO: sort by nspace
+
+    return 0;
+}
+
 pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
                                 pmix_buffer_t *buf,
                                 pmix_modex_cbfunc_t modexcbfunc,
@@ -665,6 +681,8 @@ pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
                                 "fence - assembling data: %u",
                                 (unsigned int) bucket.bytes_used);
 
+            pmix_list_sort(&trk->local_cbs, _local_cbs_proc_compare);
+
             PMIX_LIST_FOREACH(scd, &trk->local_cbs, pmix_server_caddy_t) {
                 /* get any remote contribution - note that there
                  * may not be a contribution */
@@ -678,8 +696,12 @@ pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
                 if (PMIX_SUCCESS == rc) {
                     PMIX_CONSTRUCT(&pbkt, pmix_buffer_t);
                     /* pack the proc so we know the source */
-                    PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &pbkt,
+                    /*PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &pbkt,
                                      &pcs, 1, PMIX_PROC);
+                    */
+                    pmix_output(0, "modex pack %s:%d", pcs.nspace, pcs.rank);
+                    PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &pbkt,
+                                     &pcs.rank, 1, PMIX_PROC_RANK);
                     if (PMIX_SUCCESS != rc) {
                         PMIX_ERROR_LOG(rc);
                         PMIX_DESTRUCT(&cb);

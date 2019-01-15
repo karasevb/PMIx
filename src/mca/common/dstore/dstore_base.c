@@ -2588,6 +2588,8 @@ static pmix_status_t _dstor_store_modex_cb(pmix_common_dstore_ctx_t *ds_ctx,
      * the rank followed by pmix_kval_t's. The list of callbacks
      * contains all local participants. */
 
+    PMIX_PROC_CONSTRUCT(&proc);
+
     /* setup the byte object for unpacking */
     PMIX_CONSTRUCT(&pbkt, pmix_buffer_t);
     /* the next step unfortunately NULLs the byte object's
@@ -2595,7 +2597,7 @@ static pmix_status_t _dstor_store_modex_cb(pmix_common_dstore_ctx_t *ds_ctx,
     PMIX_LOAD_BUFFER(pmix_globals.mypeer, &pbkt, bo->bytes, bo->size);
     /* unload the proc that provided this data */
     cnt = 1;
-    PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &proc, &cnt, PMIX_PROC);
+    PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &proc.rank, &cnt, PMIX_PROC_RANK);
     if (PMIX_SUCCESS != rc) {
         PMIX_ERROR_LOG(rc);
         bo->bytes = pbkt.base_ptr;
@@ -2604,6 +2606,10 @@ static pmix_status_t _dstor_store_modex_cb(pmix_common_dstore_ctx_t *ds_ctx,
         PMIX_DESTRUCT(&pbkt);
         return rc;
     }
+
+    pmix_namespace_t *_ns = pmix_list_get_last(&pmix_server_globals.nspaces);
+    pmix_strncpy(proc.nspace, _ns->nspace, PMIX_MAX_NSLEN);
+
     /* don't store blobs to the sm dstore from local clients */
     if (_my_client(proc.nspace, proc.rank)) {
         bo->bytes = pbkt.base_ptr;
