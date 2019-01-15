@@ -2302,6 +2302,9 @@ static void _mdxcbfunc(int sd, short argc, void *cbdata)
         pmix_event_del(&tracker->ev);
     }
 
+    pmix_output_verbose(1, pmix_server_globals.fence_output,
+                        "_mdxcbfunc: full size = %lu", scd->ndata);
+
     /* pass the blobs being returned */
     PMIX_CONSTRUCT(&xfer, pmix_buffer_t);
     PMIX_LOAD_BUFFER(pmix_globals.mypeer, &xfer, scd->data, scd->ndata);
