@@ -226,21 +226,23 @@ pmix_status_t pmix_bfrops_base_unpack_int(pmix_buffer_t *buffer, void *dest,
                                           int32_t *num_vals, pmix_data_type_t type)
 {
     pmix_status_t ret;
-    pmix_data_type_t remote_type;
+    //pmix_data_type_t remote_type;
 
-    if (PMIX_SUCCESS != (ret = pmix_bfrop_get_data_type(buffer, &remote_type))) {
-        return ret;
-    }
+    //if (PMIX_SUCCESS != (ret = pmix_bfrop_get_data_type(buffer, &remote_type))) {
+    //    return ret;
+    //}
 
-    if (remote_type == BFROP_TYPE_INT) {
+    //if (remote_type == BFROP_TYPE_INT) {
         /* fast path it if the sizes are the same */
         /* Turn around and unpack the real type */
-        if (PMIX_SUCCESS != (ret = unpack_gentype(buffer, dest, num_vals, BFROP_TYPE_INT))) {
-        }
-    } else {
+        //if (PMIX_SUCCESS != (
+                    ret = unpack_gentype(buffer, dest, num_vals, BFROP_TYPE_INT);
+                    //)) {
+    //    }
+    //} else {
         /* slow path - types are different sizes */
-        PMIX_BFROP_UNPACK_SIZE_MISMATCH(int, remote_type, ret);
-    }
+    //    PMIX_BFROP_UNPACK_SIZE_MISMATCH(int, remote_type, ret);
+    //}
 
     return ret;
 }
@@ -252,21 +254,23 @@ pmix_status_t pmix_bfrops_base_unpack_sizet(pmix_buffer_t *buffer, void *dest,
                                             int32_t *num_vals, pmix_data_type_t type)
 {
     pmix_status_t ret;
-    pmix_data_type_t remote_type;
+    //pmix_data_type_t remote_type;
 
-    if (PMIX_SUCCESS != (ret = pmix_bfrop_get_data_type(buffer, &remote_type))) {
-        return ret;
-    }
+    //if (PMIX_SUCCESS != (ret = pmix_bfrop_get_data_type(buffer, &remote_type))) {
+    //    return ret;
+    //}
 
-    if (remote_type == BFROP_TYPE_SIZE_T) {
+    //if (remote_type == BFROP_TYPE_SIZE_T) {
         /* fast path it if the sizes are the same */
         /* Turn around and unpack the real type */
-        if (PMIX_SUCCESS != (ret = unpack_gentype(buffer, dest, num_vals, BFROP_TYPE_SIZE_T))) {
-        }
-    } else {
+        //if (PMIX_SUCCESS != (
+    ret = unpack_gentype(buffer, dest, num_vals, BFROP_TYPE_SIZE_T);
+    //)) {
+    //    }
+    //} else {
         /* slow path - types are different sizes */
-        PMIX_BFROP_UNPACK_SIZE_MISMATCH(size_t, remote_type, ret);
-    }
+    //    PMIX_BFROP_UNPACK_SIZE_MISMATCH(size_t, remote_type, ret);
+    //}
 
     return ret;
 }
@@ -278,21 +282,23 @@ pmix_status_t pmix_bfrops_base_unpack_pid(pmix_buffer_t *buffer, void *dest,
                                           int32_t *num_vals, pmix_data_type_t type)
 {
     pmix_status_t ret;
-    pmix_data_type_t remote_type;
+    //pmix_data_type_t remote_type;
 
-    if (PMIX_SUCCESS != (ret = pmix_bfrop_get_data_type(buffer, &remote_type))) {
-        return ret;
-    }
+    //if (PMIX_SUCCESS != (ret = pmix_bfrop_get_data_type(buffer, &remote_type))) {
+    //    return ret;
+    //}
 
-    if (remote_type == BFROP_TYPE_PID_T) {
+    // if (remote_type == BFROP_TYPE_PID_T) {
         /* fast path it if the sizes are the same */
         /* Turn around and unpack the real type */
-        if (PMIX_SUCCESS != (ret = unpack_gentype(buffer, dest, num_vals, BFROP_TYPE_PID_T))) {
-        }
-    } else {
+        //if (PMIX_SUCCESS != (
+    ret = unpack_gentype(buffer, dest, num_vals, BFROP_TYPE_PID_T);
+    //)) {
+    //    }
+    //} else {
         /* slow path - types are different sizes */
-        PMIX_BFROP_UNPACK_SIZE_MISMATCH(pid_t, remote_type, ret);
-    }
+      //  PMIX_BFROP_UNPACK_SIZE_MISMATCH(pid_t, remote_type, ret);
+    //}
 
     return ret;
 }

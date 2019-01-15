@@ -167,13 +167,13 @@ static pmix_status_t pack_gentype(pmix_buffer_t *buffer, const void *src,
 pmix_status_t pmix_bfrops_base_pack_int(pmix_buffer_t *buffer, const void *src,
                                         int32_t num_vals, pmix_data_type_t type)
 {
-    pmix_status_t ret;
+    //pmix_status_t ret;
 
     /* System types need to always be described so we can properly
        unpack them */
-    if (PMIX_SUCCESS != (ret = pmix_bfrop_store_data_type(buffer, BFROP_TYPE_INT))) {
-        return ret;
-    }
+    //if (PMIX_SUCCESS != (ret = pmix_bfrop_store_data_type(buffer, BFROP_TYPE_INT))) {
+    //    return ret;
+    //}
 
     /* Turn around and pack the real type */
     return pack_gentype(buffer, src, num_vals, BFROP_TYPE_INT);
@@ -185,13 +185,13 @@ pmix_status_t pmix_bfrops_base_pack_int(pmix_buffer_t *buffer, const void *src,
 pmix_status_t pmix_bfrops_base_pack_sizet(pmix_buffer_t *buffer, const void *src,
                                           int32_t num_vals, pmix_data_type_t type)
 {
-    int ret;
+    //int ret;
 
     /* System types need to always be described so we can properly
        unpack them. */
-    if (PMIX_SUCCESS != (ret = pmix_bfrop_store_data_type(buffer, BFROP_TYPE_SIZE_T))) {
-        return ret;
-    }
+    //if (PMIX_SUCCESS != (ret = pmix_bfrop_store_data_type(buffer, BFROP_TYPE_SIZE_T))) {
+    //    return ret;
+    //}
 
     return pack_gentype(buffer, src, num_vals, BFROP_TYPE_SIZE_T);
 }
@@ -206,9 +206,9 @@ pmix_status_t pmix_bfrops_base_pack_pid(pmix_buffer_t *buffer, const void *src,
 
     /* System types need to always be described so we can properly
        unpack them. */
-    if (PMIX_SUCCESS != (ret = pmix_bfrop_store_data_type(buffer, BFROP_TYPE_PID_T))) {
-        return ret;
-    }
+    //if (PMIX_SUCCESS != (ret = pmix_bfrop_store_data_type(buffer, BFROP_TYPE_PID_T))) {
+    //    return ret;
+    //}
 
     /* Turn around and pack the real type */
     return pack_gentype(buffer, src, num_vals, BFROP_TYPE_PID_T);
