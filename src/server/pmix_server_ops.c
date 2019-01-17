@@ -629,24 +629,26 @@ pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
         pmix_list_get_size(&trk->local_cbs) == trk->nlocal) {
         pmix_output_verbose(2, pmix_server_globals.base_output,
                             "fence complete");
-        /* if the user asked us to collect data, then we have
-         * to provide any locally collected data to the host
-         * server so they can circulate it - only take data
-         * from the specified procs as not everyone is necessarily
-         * participating! And only take data intended for remote
-         * or global distribution */
-
-        PMIX_CONSTRUCT(&bucket, pmix_buffer_t);
-
-        /* mark the collection type so we can check on the
-         * receiving end that all participants did the same */
-        unsigned char tmp = (unsigned char)trk->collect_type;
-        PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &bucket,
-                         &tmp, 1, PMIX_BYTE);
 
         if (PMIX_COLLECT_YES == trk->collect_type) {
             pmix_output_verbose(2, pmix_server_globals.fence_output,
                                 "fence - assembling data");
+
+            /* if the user asked us to collect data, then we have
+             * to provide any locally collected data to the host
+             * server so they can circulate it - only take data
+             * from the specified procs as not everyone is necessarily
+             * participating! And only take data intended for remote
+             * or global distribution */
+
+            PMIX_CONSTRUCT(&bucket, pmix_buffer_t);
+
+            /* mark the collection type so we can check on the
+             * receiving end that all participants did the same */
+            unsigned char tmp = (unsigned char)trk->collect_type;
+            PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &bucket,
+                             &tmp, 1, PMIX_BYTE);
+
             PMIX_LIST_FOREACH(scd, &trk->local_cbs, pmix_server_caddy_t) {
                 /* get any remote contribution - note that there
                  * may not be a contribution */
@@ -691,24 +693,25 @@ pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
                 }
                 PMIX_DESTRUCT(&cb);
             }
+
+            /* because the remote servers have to unpack things
+             * in chunks, we have to pack the bucket as a single
+             * byte object to allow remote unpack */
+            PMIX_UNLOAD_BUFFER(&bucket, bo.bytes, bo.size);
+            PMIX_DESTRUCT(&bucket);
+            PMIX_CONSTRUCT(&bucket, pmix_buffer_t);
+            PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &bucket,
+                             &bo, 1, PMIX_BYTE_OBJECT);
+            PMIX_BYTE_OBJECT_DESTRUCT(&bo);  // releases the data
+            if (PMIX_SUCCESS != rc) {
+                PMIX_ERROR_LOG(rc);
+                PMIX_DESTRUCT(&cb);
+                goto cleanup;
+            }
+            /* now unload the blob and pass it upstairs */
+            PMIX_UNLOAD_BUFFER(&bucket, data, sz);
+            PMIX_DESTRUCT(&bucket);
         }
-        /* because the remote servers have to unpack things
-         * in chunks, we have to pack the bucket as a single
-         * byte object to allow remote unpack */
-        PMIX_UNLOAD_BUFFER(&bucket, bo.bytes, bo.size);
-        PMIX_DESTRUCT(&bucket);
-        PMIX_CONSTRUCT(&bucket, pmix_buffer_t);
-        PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &bucket,
-                         &bo, 1, PMIX_BYTE_OBJECT);
-        PMIX_BYTE_OBJECT_DESTRUCT(&bo);  // releases the data
-        if (PMIX_SUCCESS != rc) {
-            PMIX_ERROR_LOG(rc);
-            PMIX_DESTRUCT(&cb);
-            goto cleanup;
-        }
-        /* now unload the blob and pass it upstairs */
-        PMIX_UNLOAD_BUFFER(&bucket, data, sz);
-        PMIX_DESTRUCT(&bucket);
         pmix_host_server.fence_nb(trk->pcs, trk->npcs,
                                   trk->info, trk->ninfo,
                                   data, sz, trk->modexcbfunc, trk);
