@@ -28,6 +28,8 @@
 
 #include "src/mca/bfrops/base/base.h"
 #include "bfrop_pmix4.h"
+#include "src/util/error.h"
+#include "internal.h"
 
 static pmix_status_t init(void);
 static void finalize(void);
@@ -122,8 +124,8 @@ static pmix_status_t init(void)
 
     /* Register the rest of the standard generic types to point to internal functions */
     PMIX_REGISTER_TYPE("PMIX_SIZE", PMIX_SIZE,
-                       pmix_bfrops_base_pack_sizet,
-                       pmix_bfrops_base_unpack_sizet,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_size,
                        &mca_bfrops_v4_component.types);
@@ -151,22 +153,22 @@ static pmix_status_t init(void)
                        &mca_bfrops_v4_component.types);
 
     PMIX_REGISTER_TYPE("PMIX_INT16", PMIX_INT16,
-                       pmix_bfrops_base_pack_int16,
-                       pmix_bfrops_base_unpack_int16,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_int16,
                        &mca_bfrops_v4_component.types);
 
     PMIX_REGISTER_TYPE("PMIX_INT32", PMIX_INT32,
-                       pmix_bfrops_base_pack_int32,
-                       pmix_bfrops_base_unpack_int32,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_int32,
                        &mca_bfrops_v4_component.types);
 
     PMIX_REGISTER_TYPE("PMIX_INT64", PMIX_INT64,
-                       pmix_bfrops_base_pack_int64,
-                       pmix_bfrops_base_unpack_int64,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_int64,
                        &mca_bfrops_v4_component.types);
@@ -186,22 +188,22 @@ static pmix_status_t init(void)
                        &mca_bfrops_v4_component.types);
 
     PMIX_REGISTER_TYPE("PMIX_UINT16", PMIX_UINT16,
-                       pmix_bfrops_base_pack_int16,
-                       pmix_bfrops_base_unpack_int16,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_uint16,
                        &mca_bfrops_v4_component.types);
 
     PMIX_REGISTER_TYPE("PMIX_UINT32", PMIX_UINT32,
-                       pmix_bfrops_base_pack_int32,
-                       pmix_bfrops_base_unpack_int32,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_uint32,
                        &mca_bfrops_v4_component.types);
 
     PMIX_REGISTER_TYPE("PMIX_UINT64", PMIX_UINT64,
-                       pmix_bfrops_base_pack_int64,
-                       pmix_bfrops_base_unpack_int64,
+                       pmix_bfrops_base_pack_int_flex,
+                       pmix_bfrops_base_unpack_int_flex,
                        pmix_bfrops_base_std_copy,
                        pmix_bfrops_base_print_uint64,
                        &mca_bfrops_v4_component.types);
@@ -451,17 +453,107 @@ static pmix_status_t pmix4_pack(pmix_buffer_t *buffer,
                                 const void *src, int num_vals,
                                 pmix_data_type_t type)
 {
-    /* kick the process off by passing this in to the base */
-    return pmix_bfrops_base_pack(&mca_bfrops_v4_component.types,
-                                 buffer, src, num_vals, type);
+    pmix_status_t rc;
+
+    /* check for error */
+    if (NULL == buffer || NULL == src) {
+        PMIX_ERROR_LOG(PMIX_ERR_BAD_PARAM);
+        return PMIX_ERR_BAD_PARAM;
+    }
+
+     /* Pack the number of values */
+    if (PMIX_BFROP_BUFFER_FULLY_DESC == buffer->type) {
+        if (PMIX_SUCCESS != (rc = pmix_bfrop_store_data_type(buffer, PMIX_INT32))) {
+            return rc;
+        }
+    }
+    if (PMIX_SUCCESS != (rc = pmix_bfrops_base_pack_int_flex(buffer, &num_vals, 1, PMIX_INT32))) {
+        return rc;
+    }
+
+    /* Pack the value(s) */
+    return pmix_bfrops_base_pack_buffer(&mca_bfrops_v4_component.types, buffer, src, num_vals, type);
 }
 
 static pmix_status_t pmix4_unpack(pmix_buffer_t *buffer, void *dest,
                                   int32_t *num_vals, pmix_data_type_t type)
 {
-     /* kick the process off by passing this in to the base */
-    return pmix_bfrops_base_unpack(&mca_bfrops_v4_component.types,
-                                   buffer, dest, num_vals, type);
+    pmix_status_t rc, ret;
+    int32_t local_num, n=1;
+    pmix_data_type_t local_type;
+
+    /* check for error */
+    if (NULL == buffer || NULL == dest || NULL == num_vals) {
+        return PMIX_ERR_BAD_PARAM;
+    }
+
+    /* if user provides a zero for num_vals, then there is no storage allocated
+     * so return an appropriate error
+     */
+     if (0 == *num_vals) {
+        pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
+                            "pmix_bfrop_unpack: inadequate space ( %p, %p, %lu, %d )\n",
+                            (void*)buffer, dest, (long unsigned int)*num_vals, (int)type);
+        return PMIX_ERR_UNPACK_INADEQUATE_SPACE;
+    }
+
+    /** Unpack the declared number of values
+     * REMINDER: it is possible that the buffer is corrupted and that
+     * the BFROP will *think* there is a proper int32_t variable at the
+     * beginning of the unpack region - but that the value is bogus (e.g., just
+     * a byte field in a string array that so happens to have a value that
+     * matches the int32_t data type flag). Therefore, this error check is
+     * NOT completely safe. This is true for ALL unpack functions, not just
+     * int32_t as used here.
+     */
+     if (PMIX_BFROP_BUFFER_FULLY_DESC == buffer->type) {
+        if (PMIX_SUCCESS != (rc = pmix_bfrop_get_data_type(buffer, &local_type))) {
+            *num_vals = 0;
+            /* don't error log here as the user may be unpacking past
+             * the end of the buffer, which isn't necessarily an error */
+            return rc;
+        }
+        if (PMIX_INT32 != local_type) { /* if the length wasn't first, then error */
+            *num_vals = 0;
+            PMIX_ERROR_LOG(PMIX_ERR_UNPACK_FAILURE);
+            return PMIX_ERR_UNPACK_FAILURE;
+        }
+    }
+
+    n=1;
+    if (PMIX_SUCCESS != (rc = pmix_bfrops_base_unpack_int_flex(buffer, &local_num, &n, PMIX_INT32))) {
+        *num_vals = 0;
+            /* don't error log here as the user may be unpacking past
+             * the end of the buffer, which isn't necessarily an error */
+        return rc;
+    }
+    pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
+                        "pmix_bfrop_unpack: found %d values for %d provided storage",
+                        local_num, *num_vals);
+
+    /** if the storage provided is inadequate, set things up
+     * to unpack as much as we can and to return an error code
+     * indicating that everything was not unpacked - the buffer
+     * is left in a state where it can not be further unpacked.
+     */
+     if (local_num > *num_vals) {
+        local_num = *num_vals;
+        pmix_output_verbose(20, pmix_bfrops_base_framework.framework_output,
+                            "pmix_bfrop_unpack: inadequate space ( %p, %p, %lu, %d )\n",
+                            (void*)buffer, dest, (long unsigned int)*num_vals, (int)type);
+        ret = PMIX_ERR_UNPACK_INADEQUATE_SPACE;
+    } else {  /** enough or more than enough storage */
+        *num_vals = local_num;  /** let the user know how many we actually unpacked */
+        ret = PMIX_SUCCESS;
+    }
+
+    /** Unpack the value(s) */
+    if (PMIX_SUCCESS != (rc = pmix_bfrops_base_unpack_buffer(&mca_bfrops_v4_component.types, buffer, dest, &local_num, type))) {
+        *num_vals = 0;
+        ret = rc;
+    }
+
+    return ret;
 }
 
 static pmix_status_t pmix4_copy(void **dest, void *src,

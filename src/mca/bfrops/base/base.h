@@ -397,6 +397,10 @@ PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack(pmix_pointer_array_t *regtypes
                                                   pmix_buffer_t *buffer,
                                                   void *dst, int32_t *num_vals,
                                                   pmix_data_type_t type);
+PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack_buffer(pmix_pointer_array_t *regtypes,
+                                                         pmix_buffer_t *buffer,
+                                                         void *dst, int32_t *num_vals,
+                                                         pmix_data_type_t type);
 
 PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack_bool(pmix_buffer_t *buffer, void *dest,
                                                        int32_t *num_vals, pmix_data_type_t type);
