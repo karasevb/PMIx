@@ -508,8 +508,9 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
                      &tmp, 1, PMIX_BYTE);
 
     if (PMIX_COLLECT_YES == trk->collect_type) {
-        pmix_output_verbose(2, pmix_server_globals.fence_output,
-                            "fence - assembling data");
+        pmix_output_verbose(1, pmix_server_globals.fence_output,
+                            "fence - assembling data: %u",
+                            (unsigned int) bucket.bytes_used);
         PMIX_LIST_FOREACH(scd, &trk->local_cbs, pmix_server_caddy_t) {
             /* get any remote contribution - note that there
              * may not be a contribution */
@@ -531,8 +532,12 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
                     PMIX_DESTRUCT(&pbkt);
                     goto cleanup;
                 }
+                pmix_output_verbose(1, pmix_server_globals.fence_output,
+                                    "rank_info: rank=%d, size = %u", pcs.rank, (unsigned int) pbkt.bytes_used);
+
                 /* pack the returned kval's */
                 PMIX_LIST_FOREACH(kv, &cb.kvs, pmix_kval_t) {
+                    size_t old_size = pbkt.bytes_used;
                     PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &pbkt, kv, 1, PMIX_KVAL);
                     if (PMIX_SUCCESS != rc) {
                         PMIX_ERROR_LOG(rc);
@@ -540,13 +545,24 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
                         PMIX_DESTRUCT(&pbkt);
                         goto cleanup;
                     }
+                    pmix_output_verbose(1, pmix_server_globals.fence_output,
+                                        "rank_data: rank=%d, pack %s, kv size = %lu, size = %lu",
+                                        pcs.rank, kv->key, pbkt.bytes_used - old_size, pbkt.bytes_used);
                 }
+                pmix_output_verbose(1, pmix_server_globals.fence_output,
+                                    "rank_data: rank=%d, size = %u", pcs.rank,
+                                    (unsigned int) pbkt.bytes_used);
+
                 /* extract the blob */
                 PMIX_UNLOAD_BUFFER(&pbkt, bo.bytes, bo.size);
                 PMIX_DESTRUCT(&pbkt);
                 /* pack the returned blob */
                 PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &bucket,
                                  &bo, 1, PMIX_BYTE_OBJECT);
+                pmix_output_verbose(1, pmix_server_globals.fence_output,
+                                    "commit_message: rank=%d added, size = %u",
+                                    pcs.rank, (unsigned int) bucket.bytes_used);
+
                 PMIX_BYTE_OBJECT_DESTRUCT(&bo);
                 if (PMIX_SUCCESS != rc) {
                     PMIX_ERROR_LOG(rc);
@@ -797,6 +813,10 @@ pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
         /* now unload the blob and pass it upstairs */
         PMIX_UNLOAD_BUFFER(&bucket, data, sz);
         PMIX_DESTRUCT(&bucket);
+
+        pmix_output_verbose(1, pmix_server_globals.fence_output,
+                            "commit_message: final size = %lu", sz);
+
         rc = pmix_host_server.fence_nb(trk->pcs, trk->npcs,
                                        trk->info, trk->ninfo,
                                        data, sz, trk->modexcbfunc, trk);
