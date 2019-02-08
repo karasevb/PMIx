@@ -265,7 +265,7 @@ pmix_status_t pmix12_bfrop_unpack_int(pmix_buffer_t *buffer, void *dest,
         }
     } else {
         /* slow path - types are different sizes */
-        PMIX_BFROP_UNPACK_SIZE_MISMATCH(int, remote_type, ret);
+        PMIX_BFROP_UNPACK_SIZE_MISMATCH(regtypes, int, remote_type, ret);
     }
 
     return ret;
@@ -291,7 +291,7 @@ pmix_status_t pmix12_bfrop_unpack_sizet(pmix_buffer_t *buffer, void *dest,
         }
     } else {
         /* slow path - types are different sizes */
-        PMIX_BFROP_UNPACK_SIZE_MISMATCH(size_t, remote_type, ret);
+        PMIX_BFROP_UNPACK_SIZE_MISMATCH(regtypes, size_t, remote_type, ret);
     }
 
     return ret;
@@ -317,7 +317,7 @@ pmix_status_t pmix12_bfrop_unpack_pid(pmix_buffer_t *buffer, void *dest,
         }
     } else {
         /* slow path - types are different sizes */
-        PMIX_BFROP_UNPACK_SIZE_MISMATCH(pid_t, remote_type, ret);
+        PMIX_BFROP_UNPACK_SIZE_MISMATCH(regtypes, pid_t, remote_type, ret);
     }
 
     return ret;

@@ -122,7 +122,8 @@ pmix_value_cmp_t pmix12_bfrop_value_cmp(pmix_value_t *p,
 /*
  * Specialized functions
  */
-pmix_status_t pmix12_bfrop_pack_buffer(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_buffer(pmix_pointer_array_t *regtypes,
+                                      pmix_buffer_t *buffer, const void *src,
                                       int32_t num_vals, pmix_data_type_t type);
 
 pmix_status_t pmix12_bfrop_unpack_buffer(pmix_buffer_t *buffer, void *dst,
@@ -132,82 +133,118 @@ pmix_status_t pmix12_bfrop_unpack_buffer(pmix_buffer_t *buffer, void *dst,
  * Internal pack functions
  */
 
-pmix_status_t pmix12_bfrop_pack_bool(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_bool(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_byte(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_byte(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_string(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_string(pmix_pointer_array_t *regtypes,
+                                      pmix_buffer_t *buffer, const void *src,
                                       int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_sizet(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_sizet(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_pid(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_pid(pmix_pointer_array_t *regtypes,
+                                   pmix_buffer_t *buffer, const void *src,
                                    int32_t num_vals, pmix_data_type_t type);
 
-pmix_status_t pmix12_bfrop_pack_int(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_int(pmix_pointer_array_t *regtypes,
+                                   pmix_buffer_t *buffer, const void *src,
                                    int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_int16(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_int16(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_int32(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_int32(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_datatype(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_datatype(pmix_pointer_array_t *regtypes,
+                                        pmix_buffer_t *buffer, const void *src,
                                         int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_int64(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_int64(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
 
-pmix_status_t pmix12_bfrop_pack_float(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_float(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_double(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_double(pmix_pointer_array_t *regtypes,
+                                      pmix_buffer_t *buffer, const void *src,
                                       int32_t num_vals, pmix_data_type_t type);
 
-pmix_status_t pmix12_bfrop_pack_timeval(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_timeval(pmix_pointer_array_t *regtypes,
+                                       pmix_buffer_t *buffer, const void *src,
                                        int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_time(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_time(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
 
-pmix_status_t pmix12_bfrop_pack_value(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_value(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_array(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_array(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_proc(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_proc(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_app(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_app(pmix_pointer_array_t *regtypes,
+                                   pmix_buffer_t *buffer, const void *src,
                                    int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_info(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_info(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_buf(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_buf(pmix_pointer_array_t *regtypes,
+                                   pmix_buffer_t *buffer, const void *src,
                                    int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_kval(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_kval(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_modex(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_modex(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_persist(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_persist(pmix_pointer_array_t *regtypes,
+                                       pmix_buffer_t *buffer, const void *src,
                                        int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_bo(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_bo(pmix_pointer_array_t *regtypes,
+                                  pmix_buffer_t *buffer, const void *src,
                                   int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_pdata(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_pdata(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
 /* compatibility functions - no corresponding PMIx v1.x definitions */
-pmix_status_t pmix12_bfrop_pack_ptr(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_ptr(pmix_pointer_array_t *regtypes,
+                                   pmix_buffer_t *buffer, const void *src,
                                    int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_scope(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_scope(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_status(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_status(pmix_pointer_array_t *regtypes,
+                                      pmix_buffer_t *buffer, const void *src,
                                       int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_range(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_range(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_cmd(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_cmd(pmix_pointer_array_t *regtypes,
+                                   pmix_buffer_t *buffer, const void *src,
                                    int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_info_directives(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_info_directives(pmix_pointer_array_t *regtypes,
+                                               pmix_buffer_t *buffer, const void *src,
                                                int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_proc_state(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_proc_state(pmix_pointer_array_t *regtypes,
+                                          pmix_buffer_t *buffer, const void *src,
                                           int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_darray(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_darray(pmix_pointer_array_t *regtypes,
+                                      pmix_buffer_t *buffer, const void *src,
                                       int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_proc_info(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_proc_info(pmix_pointer_array_t *regtypes,
+                                         pmix_buffer_t *buffer, const void *src,
                                          int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_query(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_query(pmix_pointer_array_t *regtypes,
+                                     pmix_buffer_t *buffer, const void *src,
                                      int32_t num_vals, pmix_data_type_t type);
-pmix_status_t pmix12_bfrop_pack_rank(pmix_buffer_t *buffer, const void *src,
+pmix_status_t pmix12_bfrop_pack_rank(pmix_pointer_array_t *regtypes,
+                                    pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
 
 
@@ -408,7 +445,9 @@ pmix_status_t pmix12_bfrop_print_rank(char **output, char *prefix,
 /*
  * Internal helper functions
  */
-pmix_status_t pmix12_bfrop_store_data_type(pmix_buffer_t *buffer, pmix_data_type_t type);
+pmix_status_t pmix12_bfrop_store_data_type(pmix_pointer_array_t *regtypes,
+                                          pmix_buffer_t *buffer,
+                                          pmix_data_type_t type);
 
 pmix_status_t pmix12_bfrop_get_data_type(pmix_buffer_t *buffer, pmix_data_type_t *type);
 

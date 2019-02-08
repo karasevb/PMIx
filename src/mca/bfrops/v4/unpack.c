@@ -37,7 +37,8 @@ static int pmix_bfrop_unpack_flex(char in_buf[], uint64_t *out_val)
     return idx;
 }
 
-pmix_status_t pmix_bfrops_base_unpack_int_flex(pmix_buffer_t *buffer, void *dest,
+pmix_status_t pmix_bfrops_base_unpack_int_flex(pmix_pointer_array_t *regtypes,
+                                           pmix_buffer_t *buffer, void *dest,
                                            int32_t *num_vals,
                                            pmix_data_type_t type)
 {

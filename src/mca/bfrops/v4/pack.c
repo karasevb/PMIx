@@ -38,7 +38,8 @@ static int pmix_bfrop_pack_flex(uint64_t val, uint8_t out_buf[PMIX_BASE7_MAX_BUF
     return idx;
 }
 
-pmix_status_t pmix_bfrops_base_pack_int_flex(pmix_buffer_t *buffer,
+pmix_status_t pmix_bfrops_base_pack_int_flex(pmix_pointer_array_t *regtypes,
+                                             pmix_buffer_t *buffer,
                                              const void *src,
                                              int32_t num_vals,
                                              pmix_data_type_t type)

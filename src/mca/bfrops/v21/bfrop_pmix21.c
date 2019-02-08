@@ -75,9 +75,11 @@ typedef struct pmix_modex_data {
     size_t size;
 } pmix_modex_data_t;
 
-static pmix_status_t pmix21_bfrop_pack_array(pmix_buffer_t *buffer, const void *src,
+static pmix_status_t pmix21_bfrop_pack_array(pmix_pointer_array_t *regtypes,
+                                             pmix_buffer_t *buffer, const void *src,
                                              int32_t num_vals, pmix_data_type_t type);
-static pmix_status_t pmix21_bfrop_pack_modex(pmix_buffer_t *buffer, const void *src,
+static pmix_status_t pmix21_bfrop_pack_modex(pmix_pointer_array_t *regtypes,
+                                             pmix_buffer_t *buffer, const void *src,
                                     int32_t num_vals, pmix_data_type_t type);
 static pmix_status_t pmix21_bfrop_unpack_array(pmix_buffer_t *buffer, void *dest,
                                                int32_t *num_vals, pmix_data_type_t type);
@@ -372,7 +374,8 @@ static pmix_status_t init(void)
                        pmix_bfrops_base_copy_darray,
                        pmix_bfrops_base_print_darray,
                        &mca_bfrops_v21_component.types);
-
+    pmix_status_t pmix20_bfrop_pack_buffer(pmix_buffer_t *buffer, const void *src,
+                                           int32_t num_vals, pmix_data_type_t type);
     PMIX_REGISTER_TYPE("PMIX_PROC_RANK", PMIX_PROC_RANK,
                        pmix_bfrops_base_pack_rank,
                        pmix_bfrops_base_unpack_rank,
@@ -479,7 +482,8 @@ static const char* data_type_string(pmix_data_type_t type)
 }
 
 /**** DEPRECATED ****/
-static pmix_status_t pmix21_bfrop_pack_array(pmix_buffer_t *buffer, const void *src,
+static pmix_status_t pmix21_bfrop_pack_array(pmix_pointer_array_t *regtypes,
+                                             pmix_buffer_t *buffer, const void *src,
                                              int32_t num_vals, pmix_data_type_t type)
 {
     pmix_info_array_t *ptr;
@@ -490,12 +494,12 @@ static pmix_status_t pmix21_bfrop_pack_array(pmix_buffer_t *buffer, const void *
 
     for (i = 0; i < num_vals; ++i) {
         /* pack the size */
-        if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_sizet(buffer, &ptr[i].size, 1, PMIX_SIZE))) {
+        if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_sizet(regtypes, buffer, &ptr[i].size, 1, PMIX_SIZE))) {
             return ret;
         }
         if (0 < ptr[i].size) {
             /* pack the values */
-            if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_info(buffer, ptr[i].array, ptr[i].size, PMIX_INFO))) {
+            if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_info(regtypes, buffer, ptr[i].array, ptr[i].size, PMIX_INFO))) {
                 return ret;
             }
         }
@@ -504,8 +508,9 @@ static pmix_status_t pmix21_bfrop_pack_array(pmix_buffer_t *buffer, const void *
     return PMIX_SUCCESS;
 }
 
-static pmix_status_t pmix21_bfrop_pack_modex(pmix_buffer_t *buffer, const void *src,
-                                    int32_t num_vals, pmix_data_type_t type)
+static pmix_status_t pmix21_bfrop_pack_modex(pmix_pointer_array_t *regtypes,
+                                             pmix_buffer_t *buffer, const void *src,
+                                             int32_t num_vals, pmix_data_type_t type)
 {
     pmix_modex_data_t *ptr;
     int32_t i;
@@ -514,11 +519,11 @@ static pmix_status_t pmix21_bfrop_pack_modex(pmix_buffer_t *buffer, const void *
     ptr = (pmix_modex_data_t *) src;
 
     for (i = 0; i < num_vals; ++i) {
-        if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_sizet(buffer, &ptr[i].size, 1, PMIX_SIZE))) {
+        if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_sizet(regtypes, buffer, &ptr[i].size, 1, PMIX_SIZE))) {
             return ret;
         }
         if( 0 < ptr[i].size){
-            if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_byte(buffer, ptr[i].blob, ptr[i].size, PMIX_UINT8))) {
+            if (PMIX_SUCCESS != (ret = pmix_bfrops_base_pack_byte(regtypes, buffer, ptr[i].blob, ptr[i].size, PMIX_UINT8))) {
                 return ret;
             }
         }

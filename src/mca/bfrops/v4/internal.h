@@ -18,11 +18,13 @@
 #define BASE7_SHIFT 7
 #define BASE7_CONT_FLAG (1<<7)
 
-pmix_status_t pmix_bfrops_base_pack_int_flex(pmix_buffer_t *buffer,
+pmix_status_t pmix_bfrops_base_pack_int_flex(pmix_pointer_array_t *regtypes,
+                                             pmix_buffer_t *buffer,
                                              const void *src,
                                              int32_t num_vals,
                                              pmix_data_type_t type);
-pmix_status_t pmix_bfrops_base_unpack_int_flex(pmix_buffer_t *buffer,
+pmix_status_t pmix_bfrops_base_unpack_int_flex(pmix_pointer_array_t *regtypes,
+                                               pmix_buffer_t *buffer,
                                                void *dest,
                                                int32_t *num_vals,
                                                pmix_data_type_t type);

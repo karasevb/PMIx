@@ -444,13 +444,15 @@ int pmix12_v2_to_v1_datatype(pmix_data_type_t v2type)
     return v1type;
 }
 
-pmix_status_t pmix12_bfrop_store_data_type(pmix_buffer_t *buffer, pmix_data_type_t type)
+pmix_status_t pmix12_bfrop_store_data_type(pmix_pointer_array_t *regtypes,
+                                          pmix_buffer_t *buffer,
+                                          pmix_data_type_t type)
 {
     int v1type;
 
     v1type = pmix12_v2_to_v1_datatype(type);
 
-    return pmix12_bfrop_pack_datatype(buffer, &v1type, 1, PMIX_INT);
+    return pmix12_bfrop_pack_datatype(regtypes, buffer, &v1type, 1, PMIX_INT);
 }
 
 pmix_data_type_t pmix12_v1_to_v2_datatype(int v1type)

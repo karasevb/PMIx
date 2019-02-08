@@ -436,12 +436,13 @@ pmix_data_type_t pmix20_v21_to_v20_datatype(pmix_data_type_t v21type)
     return v20type;
 }
 
-pmix_status_t pmix20_bfrop_store_data_type(pmix_buffer_t *buffer, pmix_data_type_t type)
+pmix_status_t pmix20_bfrop_store_data_type(pmix_pointer_array_t *regtypes,
+                                           pmix_buffer_t *buffer, pmix_data_type_t type)
 {
     pmix_data_type_t v20type;
 
     v20type = pmix20_v21_to_v20_datatype(type);
-    return pmix20_bfrop_pack_datatype(buffer, &v20type, 1, PMIX_DATA_TYPE);
+    return pmix20_bfrop_pack_datatype(regtypes, buffer, &v20type, 1, PMIX_DATA_TYPE);
 }
 
 pmix_status_t pmix20_bfrop_get_data_type(pmix_buffer_t *buffer, pmix_data_type_t *type)
