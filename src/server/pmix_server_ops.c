@@ -489,6 +489,20 @@ static void fence_timeout(int sd, short args, void *cbdata)
     PMIX_RELEASE(cd);
 }
 
+static int proc_compare(pmix_list_item_t **_a,
+                              pmix_list_item_t **_b)
+{
+    pmix_proc_t *a = ((pmix_proc_caddy_t*)*_a)->proc;
+    pmix_proc_t *b = ((pmix_proc_caddy_t*)*_b)->proc;
+    int ret;
+
+    if (0 == (ret = strcmp(a->nspace, b->nspace))) {
+        assert(a->rank != b->rank);
+        return a->rank - b->rank;
+    }
+    return ret;
+}
+
 static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
                                    pmix_buffer_t *buf)
 {
@@ -501,6 +515,14 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
     pmix_proc_t pcs;
     pmix_status_t rc;
 
+    pmix_proc_caddy_t *p;
+    pmix_list_t plist_sort;
+    char *nspace_tmp = NULL;
+    pmix_rank_t rel_rank;
+    pmix_rank_t nprocs = 0;
+    pmix_namespace_t *ns;
+    size_t i;
+
     PMIX_CONSTRUCT(&bucket, pmix_buffer_t);
     /* mark the collection type so we can check on the
      * receiving end that all participants did the same */
@@ -510,6 +532,15 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
     if (PMIX_COLLECT_YES == trk->collect_type) {
         pmix_output_verbose(2, pmix_server_globals.fence_output,
                             "fence - assembling data");
+        /* create the sorted tracker proc list */
+        PMIX_CONSTRUCT(&plist_sort, pmix_list_t);
+        for(i = 0; i < trk->npcs; i++) {
+            p = PMIX_NEW(pmix_proc_caddy_t);
+            p->proc = &trk->pcs[i];
+            pmix_list_append(&plist_sort, &p->super);
+        }
+        pmix_list_sort(&plist_sort, proc_compare);
+
         PMIX_LIST_FOREACH(scd, &trk->local_cbs, pmix_server_caddy_t) {
             /* get any remote contribution - note that there
              * may not be a contribution */
@@ -521,14 +552,36 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
             cb.copy = true;
             PMIX_GDS_FETCH_KV(rc, pmix_globals.mypeer, &cb);
             if (PMIX_SUCCESS == rc) {
+                /* calculate the throughout rank */
+                rel_rank = 0;
+                nspace_tmp = NULL;
+                PMIX_LIST_FOREACH(p, &plist_sort, pmix_proc_caddy_t) {
+                    if (nspace_tmp && (0 == strcmp(nspace_tmp, p->proc->nspace))) {
+                        continue;
+                    }
+                    nprocs = 0;
+                    nspace_tmp = p->proc->nspace;
+                    PMIX_LIST_FOREACH(ns, &pmix_server_globals.nspaces, pmix_namespace_t) {
+                        if (0 == strcmp(ns->nspace, p->proc->nspace)) {
+                            nprocs = ns->nprocs;
+                            break;
+                        }
+                    }
+                    if (0 == strcmp(pcs.nspace, p->proc->nspace)) {
+                        rel_rank += pcs.rank;
+                        break;
+                    }
+                    rel_rank += nprocs;
+                }
+                /* pack the relative rank */
                 PMIX_CONSTRUCT(&pbkt, pmix_buffer_t);
-                /* pack the proc so we know the source */
                 PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, &pbkt,
-                                 &pcs, 1, PMIX_PROC);
+                                 &rel_rank, 1, PMIX_PROC_RANK);
                 if (PMIX_SUCCESS != rc) {
                     PMIX_ERROR_LOG(rc);
                     PMIX_DESTRUCT(&cb);
                     PMIX_DESTRUCT(&pbkt);
+                    PMIX_DESTRUCT(&plist_sort);
                     goto cleanup;
                 }
                 /* pack the returned kval's */
@@ -538,6 +591,7 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
                         PMIX_ERROR_LOG(rc);
                         PMIX_DESTRUCT(&cb);
                         PMIX_DESTRUCT(&pbkt);
+                        PMIX_DESTRUCT(&plist_sort);
                         goto cleanup;
                     }
                 }
@@ -551,11 +605,13 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
                 if (PMIX_SUCCESS != rc) {
                     PMIX_ERROR_LOG(rc);
                     PMIX_DESTRUCT(&cb);
+                    PMIX_DESTRUCT(&plist_sort);
                     goto cleanup;
                 }
             }
             PMIX_DESTRUCT(&cb);
         }
+        PMIX_DESTRUCT(&plist_sort);
     }
     /* because the remote servers have to unpack things
      * in chunks, we have to pack the bucket as a single

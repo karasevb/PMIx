@@ -24,6 +24,7 @@
 #include "src/util/error.h"
 
 #include "src/mca/gds/base/base.h"
+#include "src/server/pmix_server_ops.h"
 
 
 char* pmix_gds_base_get_available_modules(void)
@@ -87,6 +88,20 @@ pmix_status_t pmix_gds_base_setup_fork(const pmix_proc_t *proc,
     return PMIX_SUCCESS;
 }
 
+static int proc_compare(pmix_list_item_t **_a,
+                        pmix_list_item_t **_b)
+{
+    pmix_proc_t *a = ((pmix_proc_caddy_t*)*_a)->proc;
+    pmix_proc_t *b = ((pmix_proc_caddy_t*)*_b)->proc;
+    int ret;
+
+    if (0 == (ret = strcmp(a->nspace, b->nspace))) {
+        assert(a->rank != b->rank);
+        return a->rank - b->rank;
+    }
+    return ret;
+}
+
 pmix_status_t pmix_gds_base_store_modex(struct pmix_namespace_t *nspace,
                                         pmix_buffer_t * buff,
                                         pmix_gds_base_ctx_t ctx,
@@ -104,6 +119,12 @@ pmix_status_t pmix_gds_base_store_modex(struct pmix_namespace_t *nspace,
     pmix_server_trkr_t *trk = (pmix_server_trkr_t*)cbdata;
     pmix_proc_t proc;
     pmix_buffer_t pbkt;
+    pmix_rank_t rel_rank = 0;
+    char *nspace_tmp = NULL;
+    pmix_proc_caddy_t *p;
+    pmix_list_t plist_sort;
+    pmix_rank_t nprocs = 0;
+    size_t i;
 
     /* Loop over the enclosed byte object envelopes and
      * store them in our GDS module */
@@ -140,6 +161,14 @@ pmix_status_t pmix_gds_base_store_modex(struct pmix_namespace_t *nspace,
             ctype = (pmix_collect_t)byte;
             have_ctype = true;
         }
+        /* create the sorted tracker proc list */
+        PMIX_CONSTRUCT(&plist_sort, pmix_list_t);
+        for(i = 0; i < trk->npcs; i++) {
+            p = PMIX_NEW(pmix_proc_caddy_t);
+            p->proc = &trk->pcs[i];
+            pmix_list_append(&plist_sort, &p->super);
+        }
+        pmix_list_sort(&plist_sort, proc_compare);
 
         /* unpack the enclosed blobs from the various peers */
         cnt = 1;
@@ -158,9 +187,38 @@ pmix_status_t pmix_gds_base_store_modex(struct pmix_namespace_t *nspace,
             PMIX_LOAD_BUFFER(pmix_globals.mypeer, &pbkt, bo2.bytes, bo2.size);
             /* unload the proc that provided this data */
             cnt = 1;
-            PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &proc, &cnt,
-                               PMIX_PROC);
+            PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &rel_rank, &cnt,
+                               PMIX_PROC_RANK);
             if (PMIX_SUCCESS != rc) {
+                PMIX_ERROR_LOG(rc);
+                pbkt.base_ptr = NULL;
+                PMIX_DESTRUCT(&pbkt);
+                PMIX_DESTRUCT(&bkt);
+                goto error;
+            }
+
+            /* calculate proc form the relative rank */
+            proc.rank = PMIX_RANK_UNDEF;
+            nspace_tmp = NULL;
+            PMIX_LIST_FOREACH(p, &plist_sort, pmix_proc_caddy_t) {
+                if (nspace_tmp && (0 == strcmp(nspace_tmp, p->proc->nspace))) {
+                    continue;
+                }
+                nprocs = 0;
+                nspace_tmp = p->proc->nspace;
+                PMIX_LIST_FOREACH(ns, &pmix_server_globals.nspaces, pmix_namespace_t) {
+                    if (0 == strcmp(ns->nspace, p->proc->nspace)) {
+                        nprocs = ns->nprocs;
+                        break;
+                    }
+                }
+                if (rel_rank < nprocs) {
+                    PMIX_PROC_LOAD(&proc, p->proc->nspace, rel_rank);
+                    break;
+                }
+                rel_rank -= nprocs;
+            }
+            if (PMIX_RANK_UNDEF == proc.rank) {
                 PMIX_ERROR_LOG(rc);
                 pbkt.base_ptr = NULL;
                 PMIX_DESTRUCT(&pbkt);

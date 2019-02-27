@@ -7,6 +7,8 @@
  * Copyright (c) 2014-2015 Artem Y. Polyakov <artpol84@gmail.com>.
  *                         All rights reserved.
  * Copyright (c) 2016      IBM Corporation.  All rights reserved.
+ * Copyright (c) 2019      Mellanox Technologies, Inc.
+ *                         All rights reserved.
  * $COPYRIGHT$
  *
  * Additional copyrights may follow
@@ -147,6 +149,18 @@ static void ncddes(pmix_nspace_caddy_t *p)
 PMIX_EXPORT PMIX_CLASS_INSTANCE(pmix_nspace_caddy_t,
                                 pmix_list_item_t,
                                 ncdcon, ncddes);
+
+static void pcdcon(pmix_proc_caddy_t *p)
+{
+    p->proc = NULL;
+}
+static void pcddes(pmix_proc_caddy_t *p)
+{
+    p->proc = NULL;
+}
+PMIX_EXPORT PMIX_CLASS_INSTANCE(pmix_proc_caddy_t,
+                                pmix_list_item_t,
+                                pcdcon, pcddes);
 
 static void info_con(pmix_rank_info_t *info)
 {
