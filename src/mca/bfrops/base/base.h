@@ -165,6 +165,137 @@ PMIX_EXPORT extern pmix_bfrops_globals_t pmix_bfrops_globals;
 #define PMIX_BFROPS_FLEX_BASE7_SHIFT 7
 #define PMIX_BFROPS_FLEX_BASE7_CONT_FLAG (1<<7)
 
+#define PMIX_BFROPS_PACK_FLEX_CONVERT_SIGNED(type, ptr, out)\
+do {                                                        \
+    type __tbuf = 0;                                        \
+    uint64_t __tmp;                                         \
+    int __sign = 0;                                         \
+    memcpy(&__tbuf, (ptr), sizeof(type));                   \
+    __tmp = __tbuf;                                         \
+    (out) = (uint64_t)__tmp;                                \
+    if (__tmp & (1UL << (sizeof(__tmp)*8 - 1))) {           \
+        __sign = 1;                                         \
+        out = ~(out);                                       \
+    }                                                       \
+    (out) = ((out) << 1) + __sign;                          \
+} while (0)
+
+#define PMIX_BFROPS_PACK_FLEX_CONVERT_UNSIGNED(type, ptr, out)  \
+do {                                                            \
+    out = 0;                                                    \
+    memcpy(&out, (ptr), sizeof(type));                          \
+} while (0)
+
+#define PMIX_BFROPS_TYPE_SIZEOF(r, t, s)                    \
+do {                                                        \
+    (r) = PMIX_SUCCESS;                                     \
+    switch (t) {                                            \
+        case PMIX_INT16:                                    \
+        case PMIX_UINT16:                                   \
+            (s) = SIZEOF_SHORT;                             \
+            break;                                          \
+        case PMIX_INT:                                      \
+        case PMIX_INT32:                                    \
+        case PMIX_UINT:                                     \
+        case PMIX_UINT32:                                   \
+            (s) = SIZEOF_INT;                               \
+            break;                                          \
+        case PMIX_INT64:                                    \
+        case PMIX_UINT64:                                   \
+            (s) = SIZEOF_LONG;                              \
+            break;                                          \
+        case PMIX_SIZE:                                     \
+            (s) = SIZEOF_SIZE_T;                            \
+            break;                                          \
+        default:                                            \
+            (r) = PMIX_ERR_BAD_PARAM;                       \
+    }                                                       \
+} while (0)
+
+#define PMIX_BFROPS_PACK_FLEX_CONVERT(r, t, s, d)                   \
+do {                                                                \
+    (r) = PMIX_SUCCESS;                                             \
+    switch (t) {                                                    \
+        case PMIX_INT16:                                            \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_SIGNED(int16_t, s, d);    \
+            break;                                                  \
+        case PMIX_UINT16:                                           \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_UNSIGNED(uint16_t, s, d); \
+            break;                                                  \
+        case PMIX_INT:                                              \
+        case PMIX_INT32:                                            \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_SIGNED(int32_t, s, d);    \
+            break;                                                  \
+        case PMIX_UINT:                                             \
+        case PMIX_UINT32:                                           \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_UNSIGNED(uint32_t, s, d); \
+            break;                                                  \
+        case PMIX_INT64:                                            \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_SIGNED(int64_t, s, d);    \
+            break;                                                  \
+        case PMIX_SIZE:                                             \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_UNSIGNED(size_t, s, d);   \
+            break;                                                  \
+        case PMIX_UINT64:                                           \
+            PMIX_BFROPS_PACK_FLEX_CONVERT_UNSIGNED(uint64_t, s, d); \
+            break;                                                  \
+        default:                                                    \
+            (r) = PMIX_ERR_BAD_PARAM;                               \
+    }                                                               \
+} while(0)
+
+#define PMIX_BFROPS_UNPACK_FLEX_CONVERT_SIGNED(type, val, ptr)  \
+do {                                                            \
+    type __tbuf = 0;                                            \
+    uint64_t __tmp = val;                                       \
+    int sign = (__tmp) & 1;                                     \
+    __tmp >>= 1;                                                \
+    if (sign) {                                                 \
+        __tmp = ~__tmp;                                         \
+    }                                                           \
+    __tbuf = (type)__tmp;                                       \
+    memcpy(ptr, &__tbuf, sizeof(type));                         \
+} while (0)
+
+#define PMIX_BFROPS_UNPACK_FLEX_CONVERT_UNSIGNED(type, val, ptr)\
+do {                                                            \
+    type __tbuf = 0;                                            \
+    __tbuf = (type)val;                                         \
+    memcpy(ptr, &__tbuf, sizeof(type));                         \
+} while (0)
+
+#define PMIX_BFROPS_UNPACK_FLEX_CONVERT(r, t, s, d)                     \
+do {                                                                    \
+    (r) = PMIX_SUCCESS;                                                 \
+    switch (t) {                                                        \
+        case PMIX_INT16:                                                \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_SIGNED(int16_t, s, d);      \
+            break;                                                      \
+        case PMIX_UINT16:                                               \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_UNSIGNED(uint16_t, s, d);   \
+            break;                                                      \
+        case PMIX_INT:                                                  \
+        case PMIX_INT32:                                                \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_SIGNED(int32_t, s, d);      \
+            break;                                                      \
+        case PMIX_UINT:                                                 \
+        case PMIX_UINT32:                                               \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_UNSIGNED(uint32_t, s, d);   \
+            break;                                                      \
+        case PMIX_INT64:                                                \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_SIGNED(int64_t, s, d);      \
+            break;                                                      \
+        case PMIX_SIZE:                                                 \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_UNSIGNED(size_t, s, d);     \
+            break;                                                      \
+        case PMIX_UINT64:                                               \
+            PMIX_BFROPS_UNPACK_FLEX_CONVERT_UNSIGNED(uint64_t, s, d);   \
+            break;                                                      \
+        default:                                                        \
+            (r) = PMIX_ERR_BAD_PARAM;                                   \
+    }                                                                   \
+} while(0)
+
 /* Unpack generic size macros */
 #define PMIX_BFROP_UNPACK_SIZE_MISMATCH(reg_types, unpack_type, remote_type, ret)                     \
     do {                                                                        \
@@ -472,7 +603,11 @@ PMIX_EXPORT pmix_status_t pmix_bfrops_base_pack_iof_channel(pmix_pointer_array_t
 PMIX_EXPORT pmix_status_t pmix_bfrops_base_pack_envar(pmix_pointer_array_t *regtypes,
                                                       pmix_buffer_t *buffer, const void *src,
                                                       int32_t num_vals, pmix_data_type_t type);
-
+PMIX_EXPORT pmix_status_t pmix_bfrops_base_pack_int_flex(pmix_pointer_array_t *regtypes,
+                                                         pmix_buffer_t *buffer,
+                                                         const void *src,
+                                                         int32_t num_vals,
+                                                         pmix_data_type_t type);
 /*
 * "Standard" unpack functions
 */
@@ -603,6 +738,10 @@ PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack_iof_channel(pmix_pointer_array
 PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack_envar(pmix_pointer_array_t *regtypes,
                                                         pmix_buffer_t *buffer, void *dest,
                                                         int32_t *num_vals, pmix_data_type_t type);
+PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack_int_flex(pmix_pointer_array_t *regtypes,
+                                                           pmix_buffer_t *buffer, void *dest,
+                                                           int32_t *num_vals,
+                                                           pmix_data_type_t type);
 /**** DEPRECATED ****/
 PMIX_EXPORT pmix_status_t pmix_bfrops_base_unpack_array(pmix_pointer_array_t *regtypes,
                                                         pmix_buffer_t *buffer, void *dest,
