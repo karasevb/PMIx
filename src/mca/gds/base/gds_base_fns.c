@@ -24,6 +24,7 @@
 #include "src/util/error.h"
 
 #include "src/mca/gds/base/base.h"
+#include "src/server/pmix_server_ops.h"
 
 
 char* pmix_gds_base_get_available_modules(void)
@@ -104,6 +105,8 @@ pmix_status_t pmix_gds_base_store_modex(struct pmix_namespace_t *nspace,
     pmix_server_trkr_t *trk = (pmix_server_trkr_t*)cbdata;
     pmix_proc_t proc;
     pmix_buffer_t pbkt;
+    pmix_rank_t rel_rank;
+    pmix_nspace_caddy_t *nm;
 
     /* Loop over the enclosed byte object envelopes and
      * store them in our GDS module */
@@ -158,9 +161,25 @@ pmix_status_t pmix_gds_base_store_modex(struct pmix_namespace_t *nspace,
             PMIX_LOAD_BUFFER(pmix_globals.mypeer, &pbkt, bo2.bytes, bo2.size);
             /* unload the proc that provided this data */
             cnt = 1;
-            PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &proc, &cnt,
-                               PMIX_PROC);
+            PMIX_BFROPS_UNPACK(rc, pmix_globals.mypeer, &pbkt, &rel_rank, &cnt,
+                               PMIX_PROC_RANK);
             if (PMIX_SUCCESS != rc) {
+                PMIX_ERROR_LOG(rc);
+                pbkt.base_ptr = NULL;
+                PMIX_DESTRUCT(&pbkt);
+                PMIX_DESTRUCT(&bkt);
+                goto error;
+            }
+            proc.rank = PMIX_RANK_UNDEF;
+            /* calculate proc form the relative rank */
+            PMIX_LIST_FOREACH(nm, &trk->nslist, pmix_nspace_caddy_t) {
+                if (rel_rank < nm->ns->nprocs) {
+                    PMIX_PROC_LOAD(&proc, nm->ns->nspace, rel_rank);
+                    break;
+                }
+                rel_rank -= nm->ns->nprocs;
+            }
+            if (PMIX_RANK_UNDEF == proc.rank) {
                 PMIX_ERROR_LOG(rc);
                 pbkt.base_ptr = NULL;
                 PMIX_DESTRUCT(&pbkt);
