@@ -581,16 +581,16 @@ static pmix_status_t _collect_data(pmix_server_trkr_t *trk,
             }
             PMIX_DESTRUCT(&cb);
         }
-    }
-    /* because the remote servers have to unpack things
-     * in chunks, we have to pack the bucket as a single
-     * byte object to allow remote unpack */
-    PMIX_UNLOAD_BUFFER(&bucket, bo.bytes, bo.size);
-    PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, buf,
-                     &bo, 1, PMIX_BYTE_OBJECT);
-    PMIX_BYTE_OBJECT_DESTRUCT(&bo);  // releases the data
-    if (PMIX_SUCCESS != rc) {
-        PMIX_ERROR_LOG(rc);
+	/* because the remote servers have to unpack things
+	 * in chunks, we have to pack the bucket as a single
+	 * byte object to allow remote unpack */
+	PMIX_UNLOAD_BUFFER(&bucket, bo.bytes, bo.size);
+	PMIX_BFROPS_PACK(rc, pmix_globals.mypeer, buf,
+			 &bo, 1, PMIX_BYTE_OBJECT);
+	PMIX_BYTE_OBJECT_DESTRUCT(&bo);  // releases the data
+	if (PMIX_SUCCESS != rc) {
+	    PMIX_ERROR_LOG(rc);
+	}
     }
 
   cleanup:
