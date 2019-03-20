@@ -2304,7 +2304,6 @@ static void _mdxcbfunc(int sd, short argc, void *cbdata)
 
     /* pass the blobs being returned */
     PMIX_CONSTRUCT(&xfer, pmix_buffer_t);
-    PMIX_LOAD_BUFFER(pmix_globals.mypeer, &xfer, scd->data, scd->ndata);
     PMIX_CONSTRUCT(&nslist, pmix_list_t);
 
     if (PMIX_SUCCESS != scd->status) {
@@ -2323,12 +2322,15 @@ static void _mdxcbfunc(int sd, short argc, void *cbdata)
         goto finish_collective;
     }
 
-    // collect the pmix_namespace_t's of all local participants
+    /* Collect the nptr list with uniq GDS components of all local
+     * participants. It does not allow multiple storing to the
+     * same GDS if participants have mutual GDS. */
     PMIX_LIST_FOREACH(cd, &tracker->local_cbs, pmix_server_caddy_t) {
         // see if we already have this nspace
         found = false;
         PMIX_LIST_FOREACH(nptr, &nslist, pmix_nspace_caddy_t) {
-            if (nptr->ns == cd->peer->nptr) {
+            if (0 == strcmp(nptr->ns->compat.gds->name,
+                            cd->peer->nptr->compat.gds->name)) {
                 found = true;
                 break;
             }
@@ -2341,8 +2343,9 @@ static void _mdxcbfunc(int sd, short argc, void *cbdata)
             pmix_list_append(&nslist, &nptr->super);
         }
     }
-
     PMIX_LIST_FOREACH(nptr, &nslist, pmix_nspace_caddy_t) {
+        /* pass the blobs being returned */
+        PMIX_LOAD_BUFFER(pmix_globals.mypeer, &xfer, scd->data, scd->ndata);
         PMIX_GDS_STORE_MODEX(rc, nptr->ns, &xfer, tracker);
         if (PMIX_SUCCESS != rc) {
             PMIX_ERROR_LOG(rc);
