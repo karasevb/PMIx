@@ -55,6 +55,15 @@
 
 #include "pmix_client_ops.h"
 
+#include <time.h>
+
+inline static double get_time_nsec()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (ts.tv_sec + 1E-9 * ts.tv_nsec);
+}
+
 static pmix_status_t unpack_return(pmix_buffer_t *data);
 static pmix_status_t pack_fence(pmix_buffer_t *msg, pmix_cmd_t cmd,
                                 const pmix_proc_t *procs, size_t nprocs,
@@ -168,6 +177,7 @@ PMIX_EXPORT pmix_status_t PMIx_Fence_nb(const pmix_proc_t procs[], size_t nprocs
     cb->cbfunc.opfn = cbfunc;
     cb->cbdata = cbdata;
 
+    pmix_output(0, "pmix/serv_send %lf", get_time_nsec());
     /* push the message into our event base to send to the server */
     PMIX_PTL_SEND_RECV(rc, pmix_client_globals.myserver,
                        msg, wait_cbfunc, (void*)cb);
@@ -256,6 +266,8 @@ static void wait_cbfunc(struct pmix_peer_t *pr, pmix_ptl_hdr_t *hdr,
 
     pmix_output_verbose(2, pmix_globals.debug_output,
                         "pmix: fence_nb callback recvd");
+
+    pmix_output(0, "pmix/serv_resp %lf", get_time_nsec());
 
     if (NULL == cb) {
         PMIX_ERROR_LOG(PMIX_ERR_BAD_PARAM);

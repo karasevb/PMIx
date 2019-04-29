@@ -64,6 +64,16 @@
 
 #include "pmix_server_ops.h"
 
+
+#include <time.h>
+
+inline static double get_time_nsec()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (ts.tv_sec + 1E-9 * ts.tv_nsec);
+}
+
 /* The rank_blob_t type to collect processes blobs,
  * this list afterward will form a node modex blob. */
 typedef struct {
@@ -1003,6 +1013,9 @@ pmix_status_t pmix_server_fence(pmix_server_caddy_t *cd,
         PMIX_UNLOAD_BUFFER(&bucket, data, sz);
         PMIX_DESTRUCT(&bucket);
         trk->host_called = true;
+        
+        pmix_server_globals.fence_seq++;
+        pmix_output(0, "pmix/invoke_rm_cb seq=%d %lf", pmix_server_globals.fence_seq, get_time_nsec());
         rc = pmix_host_server.fence_nb(trk->pcs, trk->npcs,
                                        trk->info, trk->ninfo,
                                        data, sz, trk->modexcbfunc, trk);

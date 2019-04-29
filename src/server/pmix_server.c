@@ -75,6 +75,14 @@
 #include "src/client/pmix_client_ops.h"
 #include "pmix_server_ops.h"
 
+#include <time.h>
+inline static double get_time_nsec()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (ts.tv_sec + 1E-9 * ts.tv_nsec);
+}
+
 // global variables
 pmix_server_globals_t pmix_server_globals = {{{0}}};
 
@@ -88,6 +96,7 @@ static pid_t mypid;
 // local functions for connection support
 pmix_status_t pmix_server_initialize(void)
 {
+    pmix_server_globals.fence_seq = -1;
     /* setup the server-specific globals */
     PMIX_CONSTRUCT(&pmix_server_globals.clients, pmix_pointer_array_t);
     pmix_pointer_array_init(&pmix_server_globals.clients, 1, INT_MAX, 1);
@@ -2376,6 +2385,12 @@ static void _mdxcbfunc(int sd, short argc, void *cbdata)
         pmix_output_verbose(2, pmix_server_globals.base_output,
                             "server:modex_cbfunc reply being sent to %s:%u",
                             cd->peer->info->pname.nspace, cd->peer->info->pname.rank);
+                    
+        pmix_output(0, "pmix/reply_clients seq=%d, rank=%d %lf",
+                    pmix_server_globals.fence_seq,
+                    cd->peer->info->pname.rank,
+                    get_time_nsec());
+        
         PMIX_SERVER_QUEUE_REPLY(rc, cd->peer, cd->hdr.tag, reply);
         if (PMIX_SUCCESS != rc) {
             PMIX_RELEASE(reply);
@@ -2412,6 +2427,9 @@ static void modex_cbfunc(pmix_status_t status, const char *data, size_t ndata, v
     pmix_server_trkr_t *tracker = (pmix_server_trkr_t*)cbdata;
     pmix_shift_caddy_t *scd;
 
+    pmix_output(0, "pmix/ret_from_cb seq=%d %lf", pmix_server_globals.fence_seq,
+                get_time_nsec());
+    
     pmix_output_verbose(2, pmix_server_globals.base_output,
                         "server:modex_cbfunc called with %d bytes", (int)ndata);
 
