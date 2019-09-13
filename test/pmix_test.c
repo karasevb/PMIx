@@ -16,7 +16,7 @@
  * Copyright (c) 2013-2017 Intel, Inc. All rights reserved.
  * Copyright (c) 2015      Research Organization for Information Science
  *                         and Technology (RIST). All rights reserved.
- * Copyright (c) 2015-2018 Mellanox Technologies, Inc.
+ * Copyright (c) 2015-2019 Mellanox Technologies, Inc.
  *                         All rights reserved.
  *
  * $COPYRIGHT$
@@ -113,25 +113,79 @@ int main(int argc, char **argv)
         }
         /* we have a single namespace for all clients */
         ns_nprocs = params.nprocs;
-        launched += server_launch_clients(params.lsize, params.nprocs, base_rank,
-                                   &params, &client_env, &client_argv);
+        server_add_nspace(params.lsize, params.nprocs, base_rank, 0);
     } else {
         char *pch;
+        int srv_cnt = 0;
+        int base_rank = 0;
+        int ns_dist[PMIX_TEST_MAX_NS];
+        int ns_num = 0;
+        int i;
+
+        memset(ns_dist, 0, sizeof(int) * PMIX_TEST_MAX_NS);
+
         pch = strtok(params.ns_dist, ":");
         while (NULL != pch) {
             ns_nprocs = (int)strtol(pch, NULL, 10);
-            if (params.nprocs < (uint32_t)(launched+ns_nprocs)) {
-                TEST_ERROR(("srv #%d: Total number of processes doesn't correspond number specified by ns_dist parameter.", my_server_id));
-                FREE_TEST_PARAMS(params);
-                return PMIX_ERROR;
-            }
-            if (0 < ns_nprocs) {
-                launched += server_launch_clients(ns_nprocs, ns_nprocs, 0, &params,
-                                           &client_env, &client_argv);
-            }
             pch = strtok (NULL, ":");
+            if (!ns_nprocs) {
+                continue;
+            }
+            ns_dist[ns_num++] = ns_nprocs;
+        }
+        for (i = 0; i < ns_num; i++) {
+            ns_nprocs = ns_dist[i];
+            if (ns_nprocs == 1) {
+                if (srv_cnt == my_server_id) {
+                    base_rank = 0;
+                    /*
+                    pmix_output(0, "%u: base_rank %d, ns_nprocs %u, nspace %d",
+                                my_server_id, base_rank, ns_nprocs, i);
+                    */
+                    /*
+                    launched += server_launch_clients(1, ns_nprocs, base_rank,
+                                                      i, &params, &client_env,
+                                                      &client_argv);
+                    */
+                    server_add_nspace(1, ns_nprocs, base_rank, i);
+                }
+                srv_cnt++;
+                if (srv_cnt >= params.nservers) {
+                    srv_cnt = 0;
+                }
+            } else {
+                int n;
+                int ns_lprocs = (ns_nprocs % params.nservers) > my_server_id ?
+                            ns_nprocs / params.nservers + 1 :
+                            ns_nprocs / params.nservers;
+                /* compute my start counter */
+                base_rank = 0;
+                for(n = 0; n < my_server_id; n++) {
+                    base_rank += (ns_nprocs % params.nservers) > n ?
+                                ns_nprocs / params.nservers + 1 :
+                                ns_nprocs / params.nservers;
+                }
+                /*pmix_output(0, "%u: base_rank %d, ns_nprocs %u, ns_lprocs %u, nspace %d",
+                            my_server_id, base_rank, ns_nprocs, ns_lprocs, i);
+                            */
+                /*
+                launched += server_launch_clients(ns_lprocs, ns_nprocs, base_rank,
+                                                  i, &params, &client_env,
+                                                  &client_argv);
+                */
+                server_add_nspace(ns_lprocs, ns_nprocs, base_rank, i);
+            }
         }
     }
+
+    server_nspace_t *ns_tmp;
+    PMIX_LIST_FOREACH(ns_tmp, server_nspace, server_nspace_t) {
+        pmix_output(0, "%u: %s: %u", my_server_id, ns_tmp->name, ns_tmp->ntasks);
+    }
+    launched += server_launch_clients(&params, &client_env, &client_argv);
+
+    //return 0;
+
     if (params.lsize != (uint32_t)launched) {
         TEST_ERROR(("srv #%d: Total number of processes doesn't correspond number specified by ns_dist parameter.", my_server_id));
         cli_kill_all();

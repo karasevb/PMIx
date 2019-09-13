@@ -146,6 +146,8 @@ int main(int argc, char **argv)
         }
     }
 
+    pmix_output(0, "Client %d started", getpid());
+
     /* init us and declare we are a test programming model */
     PMIX_INFO_CREATE(iptr, 2);
     PMIX_INFO_LOAD(&iptr[0], PMIX_PROGRAMMING_MODEL, "TEST", PMIX_STRING);

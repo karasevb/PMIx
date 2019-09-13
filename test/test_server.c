@@ -63,6 +63,7 @@ static void nsdes(server_nspace_t *ns)
     if (ns->task_map) {
         free(ns->task_map);
     }
+    PMIX_LIST_DESTRUCT(&ns->ranks);
 }
 
 static void nscon(server_nspace_t *ns)
@@ -70,11 +71,16 @@ static void nscon(server_nspace_t *ns)
     memset(ns->name, 0, PMIX_MAX_NSLEN);
     ns->ntasks = 0;
     ns->task_map = NULL;
+    PMIX_CONSTRUCT(&ns->ranks, pmix_list_t);
 }
 
 PMIX_CLASS_INSTANCE(server_nspace_t,
                     pmix_list_item_t,
                     nscon, nsdes);
+
+PMIX_CLASS_INSTANCE(proc_info_t,
+                    pmix_list_item_t,
+                    NULL, NULL);
 
 static int server_send_procs(void);
 static void server_read_cb(int fd, short event, void *arg);
@@ -177,111 +183,147 @@ static void set_namespace(int local_size, int univ_size,
 
 static void server_unpack_procs(char *buf, size_t size)
 {
-    char *ptr = buf;
     size_t i;
-    size_t ns_count;
+    char *ptr = buf;
     char *nspace;
+    server_nspace_t *tmp, *ns_item = NULL;
+    uint32_t server_id, ntasks, ltasks, ns_id;
+
+    int delay = 0;
+    while (delay) sleep(1);
 
     while ((size_t)(ptr - buf) < size) {
-        ns_count = *(size_t *)ptr;
-        ptr += sizeof(size_t);
+        /* unpack server_id */
+        server_id = *(uint32_t *)ptr;
+        //pmix_output(0, "%u: unpack server_id %u", my_server_id, server_id);
+        ptr += sizeof(uint32_t);
 
-        for (i = 0; i < ns_count; i++) {
-            server_nspace_t *tmp, *ns_item = NULL;
-            size_t ltasks, ntasks;
-            int server_id;
+        /* unpack ns_id */
+        ns_id = *(uint32_t *)ptr;
+        //pmix_output(0, "%u: unpack ns_id %u", my_server_id, ns_id);
+        ptr += sizeof(uint32_t);
 
-            server_id = *(int *)ptr;
-            ptr += sizeof(int);
+        /* unpack ns name */
+        nspace = ptr;
+        //pmix_output(0, "%u: unpack nspace %s", my_server_id, nspace);
+        ptr += PMIX_MAX_NSLEN+1;
 
-            nspace = ptr;
-            ptr += PMIX_MAX_NSLEN+1;
+        /* unpack ns total size */
+        ntasks = *(uint32_t *)ptr;
+        //pmix_output(0, "%u: unpack ntasks %u", my_server_id, ntasks);
+        ptr += sizeof(uint32_t);
 
-            ntasks = *(size_t *)ptr;
-            ptr += sizeof(size_t);
+        /* pack ns local size */
+        ltasks = *(uint32_t *)ptr;
+        //pmix_output(0, "%u: unpack ltasks %u", my_server_id, ltasks);
+        ptr += sizeof(uint32_t);
 
-            ltasks = *(size_t *)ptr;
-            ptr += sizeof(size_t);
-
-            PMIX_LIST_FOREACH(tmp, server_nspace, server_nspace_t) {
-                if (0 == strcmp(nspace, tmp->name)) {
-                    ns_item = tmp;
-                    break;
-                }
+        /* search nspace */
+        PMIX_LIST_FOREACH(tmp, server_nspace, server_nspace_t) {
+            ns_item = NULL;
+            if (0 == strcmp(nspace, tmp->name)) {
+                ns_item = tmp;
+                break;
             }
-            if (NULL == ns_item) {
-                ns_item = PMIX_NEW(server_nspace_t);
-                memcpy(ns_item->name, nspace, PMIX_MAX_NSLEN);
-                pmix_list_append(server_nspace, &ns_item->super);
-                ns_item->ltasks = ltasks;
-                ns_item->ntasks = ntasks;
-                ns_item->task_map = (int*)malloc(sizeof(int) * ntasks);
-                memset(ns_item->task_map, -1, sizeof(int) * ntasks);
-            } else {
-                assert(ns_item->ntasks == ntasks);
+        }
+
+        if (NULL == ns_item) {
+            ns_item = PMIX_NEW(server_nspace_t);
+            memcpy(ns_item->name, nspace, PMIX_MAX_NSLEN);
+            pmix_list_append(server_nspace, &ns_item->super);
+            ns_item->id = ns_id;
+            ns_item->ltasks = ltasks;
+            ns_item->ntasks = ntasks;
+            ns_item->task_map = (int*)malloc(sizeof(int) * ntasks);
+            memset(ns_item->task_map, -1, sizeof(int) * ntasks);
+        } else {
+            assert(ns_item->ntasks == ntasks);
+            assert(ns_item->id == ns_id);
+        }
+
+        for(i = 0; i < ltasks; i++) {
+            proc_info_t *rinfo = PMIX_NEW(proc_info_t);
+            rinfo->rank = *(pmix_rank_t *)ptr;
+            ptr += sizeof(pmix_rank_t);
+            if (ns_item->task_map[rinfo->rank] >= 0) {
+                continue;
             }
-            size_t i;
-            for (i = 0; i < ltasks; i++) {
-                int rank = *(int *)ptr;
-                ptr += sizeof(int);
-                if (ns_item->task_map[rank] >= 0) {
-                    continue;
-                }
-                ns_item->task_map[rank] = server_id;
-            }
+            pmix_output(0, "%u: unpack add rank %s:%u",
+                        my_server_id, ns_item->name, rinfo->rank);
+            pmix_list_append(&ns_item->ranks, &rinfo->super);
+            ns_item->task_map[rinfo->rank] = server_id;
+            pmix_output(0, "%u: unpack bind rank %s:%u to %u",
+                        my_server_id, ns_item->name, rinfo->rank, server_id);
         }
     }
 }
 
-static size_t server_pack_procs(int server_id, char **buf, size_t size)
+static size_t server_pack_procs(int server_id, server_nspace_t *nspace,
+                                char **buf, size_t size)
 {
     size_t ns_count = pmix_list_get_size(server_nspace);
-    size_t buf_size = sizeof(size_t) + (PMIX_MAX_NSLEN+1)*ns_count;
-    server_nspace_t *tmp;
+    size_t buf_size = size;
+    proc_info_t *proc;
     char *ptr;
+
+    //pmix_output(0, "%u: pack for %s", server_id, nspace->name);
 
     if (0 == ns_count) {
         return 0;
     }
 
-    buf_size += size;
-    /* compute size: server_id + total + local procs count + ranks */
-    PMIX_LIST_FOREACH(tmp, server_nspace, server_nspace_t) {
-        buf_size += sizeof(int) + sizeof(size_t) + sizeof(size_t) +
-                sizeof(int) * tmp->ltasks;
-    }
-    *buf = (char*)realloc(*buf, buf_size);
-    memset(*buf + size, 0, buf_size);
-    ptr = *buf + size;
-    /* pack ns count */
-    memcpy(ptr, &ns_count, sizeof(size_t));
-    ptr += sizeof(size_t);
+    // server id int32
+    // nspace->id; int32
+    // nspace->name; PMIX_MAX_NSLEN
+    // nspace->ntasks; int32
+    // nspace->ltasks; int32
 
     assert(server_nspace->pmix_list_length);
 
-    PMIX_LIST_FOREACH(tmp, server_nspace, server_nspace_t) {
-        size_t i;
-        /* pack server_id */
-        memcpy(ptr, &server_id, sizeof(int));
-        ptr += sizeof(int);
-        /* pack ns name */
-        memcpy(ptr, tmp->name, PMIX_MAX_NSLEN+1);
-        ptr += PMIX_MAX_NSLEN+1;
-        /* pack ns total size */
-        memcpy(ptr, &tmp->ntasks, sizeof(size_t));
-        ptr += sizeof(size_t);
-        /* pack ns local size */
-        memcpy(ptr, &tmp->ltasks, sizeof(size_t));
-        ptr += sizeof(size_t);
-        /* pack ns ranks */
-        for(i = 0; i < tmp->ntasks; i++) {
-            if (tmp->task_map[i] == server_id) {
-                int rank = (int)i;
-                memcpy(ptr, &rank, sizeof(int));
-                ptr += sizeof(int);
-            }
+    /* compute size: server_id + ns_id + ntasks + ltasks + ranks */
+    buf_size += sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) +
+            sizeof(uint32_t) + sizeof(pmix_rank_t) * nspace->ltasks +
+            (PMIX_MAX_NSLEN+1);
+
+    *buf = (char*)realloc(*buf, buf_size);
+    ptr = *buf + size;
+    memset(ptr, 0, buf_size);
+
+    /* pack server_id */
+    memcpy(ptr, &server_id, sizeof(uint32_t));
+    //pmix_output(0, "%u: pack server_id %u", server_id, server_id);
+    ptr += sizeof(uint32_t);
+
+    /* pack ns id */
+    memcpy(ptr, &nspace->id, sizeof(uint32_t));
+    //pmix_output(0, "%u: pack id %u", server_id, nspace->id);
+    ptr += sizeof(uint32_t);
+
+    /* pack ns name */
+    memcpy(ptr, nspace->name, PMIX_MAX_NSLEN+1);
+    //pmix_output(0, "%u: pack name %s", server_id, nspace->name);
+    ptr += PMIX_MAX_NSLEN+1;
+
+    /* pack ns total size */
+    memcpy(ptr, &nspace->ntasks, sizeof(uint32_t));
+    //pmix_output(0, "%u: pack ntasks %u", server_id, nspace->ntasks);
+    ptr += sizeof(uint32_t);
+
+    /* pack ns local size */
+    memcpy(ptr, &nspace->ltasks, sizeof(uint32_t));
+    //pmix_output(0, "%u: pack name %u", server_id, nspace->ltasks);
+    ptr += sizeof(uint32_t);
+
+    /* pack ns local ranks */
+    PMIX_LIST_FOREACH(proc, &nspace->ranks, proc_info_t) {
+        if (nspace->task_map[proc->rank] == server_id) {
+            //pmix_output(0, "%u: procs pack rank %u", server_id, proc->rank);
+            memcpy(ptr, &proc->rank, sizeof(pmix_rank_t));
+            ptr += sizeof(pmix_rank_t);
         }
     }
+
+    //pmix_output(0, "%u: %lu %lu", server_id, ptr - *buf, buf_size);
     assert((size_t)(ptr - *buf) == buf_size);
     return buf_size;
 }
@@ -401,6 +443,7 @@ static void _send_procs_cb(pmix_status_t status, const char *data,
 static int server_send_procs(void)
 {
     server_info_t *server;
+    server_nspace_t *ns_tmp;
     msg_hdr_t msg_hdr;
     int rc = PMIX_SUCCESS;
     char *buf = NULL;
@@ -414,7 +457,12 @@ static int server_send_procs(void)
     msg_hdr.cmd = CMD_FENCE_CONTRIB;
     msg_hdr.dst_id = 0;
     msg_hdr.src_id = my_server_id;
-    msg_hdr.size = server_pack_procs(my_server_id, &buf, 0);
+    msg_hdr.size = 0;
+
+    PMIX_LIST_FOREACH(ns_tmp, server_nspace, server_nspace_t) {
+        size_t old_size = msg_hdr.size;
+        msg_hdr.size += server_pack_procs(my_server_id, ns_tmp, &buf, old_size);
+    }
     server->modex_cbfunc = _send_procs_cb;
     server->cbdata = (void*)server;
 
@@ -863,119 +911,143 @@ exit:
     return total_ret;
 }
 
-int server_launch_clients(int local_size, int univ_size, int base_rank,
-                   test_params *params, char *** client_env, char ***base_argv)
+void server_add_nspace(uint32_t local_size, uint32_t univ_size,
+                       uint32_t base_rank, uint32_t num_ns)
 {
-    int n;
+    server_nspace_t *nspace_item = NULL, *tmp;
+    proc_info_t *rinfo;
+    uint32_t n;
+
+    /* search nspace */
+    PMIX_LIST_FOREACH(tmp, server_nspace, server_nspace_t) {
+        if (num_ns == tmp->id) {
+            nspace_item = tmp;
+            break;
+        }
+    }
+
+    if (NULL == nspace_item) {
+        nspace_item = PMIX_NEW(server_nspace_t);
+        (void)snprintf(nspace_item->name, PMIX_MAX_NSLEN, "%s-%d", TEST_NAMESPACE,
+                       num_ns);
+        nspace_item->id = num_ns;
+        nspace_item->ntasks = univ_size;
+        nspace_item->ltasks = local_size;
+        nspace_item->task_map = (int*)malloc(sizeof(int) * univ_size);
+        memset(nspace_item->task_map, -1, sizeof(int)*univ_size);
+        pmix_list_append(server_nspace, &nspace_item->super);
+        set_namespace(local_size, univ_size, base_rank, nspace_item->name);
+    }
+
+    for (n = 0; n < local_size; n++) {
+        rinfo = PMIX_NEW(proc_info_t);
+        rinfo->rank = base_rank + n;
+        pmix_list_append(&nspace_item->ranks, &rinfo->super);
+        nspace_item->task_map[rinfo->rank] = my_server_id;
+        pmix_output(0, "%u: add ns bind rank %s:%u to %u",
+                    my_server_id, nspace_item->name, rinfo->rank, my_server_id);
+        nspace_item->id = num_ns;
+    }
+}
+
+int server_launch_clients(test_params *params, char *** client_env,
+                          char ***base_argv)
+{
     uid_t myuid;
     gid_t mygid;
-    char *ranks = NULL;
     char digit[MAX_DIGIT_LEN];
     int rc;
     static int cli_counter = 0;
-    static int num_ns = 0;
     pmix_proc_t proc;
     int rank_counter = 0;
-    server_nspace_t *nspace_item = PMIX_NEW(server_nspace_t);
-
-    TEST_VERBOSE(("%d: lsize: %d, base rank %d, local_size %d, univ_size %d",
-                  my_server_id,
-                  params->lsize,
-                  base_rank,
-                  local_size,
-                  univ_size));
-
-    TEST_VERBOSE(("Setting job info"));
-    (void)snprintf(proc.nspace, PMIX_MAX_NSLEN, "%s-%d", TEST_NAMESPACE, num_ns);
-    set_namespace(local_size, univ_size, base_rank, proc.nspace);
-    if (NULL != ranks) {
-        free(ranks);
-    }
-    /* add namespace entry */
-    nspace_item->ntasks = univ_size;
-    nspace_item->ltasks = local_size;
-    nspace_item->task_map = (int*)malloc(sizeof(int) * univ_size);
-    memset(nspace_item->task_map, -1, sizeof(int)*univ_size);
-    strcpy(nspace_item->name, proc.nspace);
-    pmix_list_append(server_nspace, &nspace_item->super);
-    for (n = 0; n < local_size; n++) {
-        proc.rank = base_rank + n;
-        nspace_item->task_map[proc.rank] = my_server_id;
-    }
+    server_nspace_t *nspace;
+    proc_info_t *rinfo;
 
     server_send_procs();
 
     myuid = getuid();
     mygid = getgid();
 
-    /* fork/exec the test */
-    for (n = 0; n < local_size; n++) {
-        proc.rank = base_rank + rank_counter;
-        rc = PMIx_server_register_client(&proc, myuid, mygid, NULL, NULL, NULL);
-        if (PMIX_SUCCESS != rc && PMIX_OPERATION_SUCCEEDED != rc) {
-            TEST_ERROR(("Server register client failed with error %d", rc));
-            PMIx_server_finalize();
-            cli_kill_all();
-            return 0;
-        }
-        if (PMIX_SUCCESS != (rc = PMIx_server_setup_fork(&proc, client_env))) {//n
-            TEST_ERROR(("Server fork setup failed with error %d", rc));
-            PMIx_server_finalize();
-            cli_kill_all();
-            return rc;
-        }
+    int delay = 0;
+    while (delay) sleep(1);
 
-        cli_info[cli_counter].pid = fork();
-        if (cli_info[cli_counter].pid < 0) {
-            TEST_ERROR(("Fork failed"));
-            PMIx_server_finalize();
-            cli_kill_all();
-            return 0;
-        }
-        cli_info[cli_counter].rank = proc.rank;//n
-        cli_info[cli_counter].ns = strdup(proc.nspace);
-
-        char **client_argv = pmix_argv_copy(*base_argv);
-
-        /* add two last arguments: -r <rank> */
-        sprintf(digit, "%d", proc.rank);
-        pmix_argv_append_nosize(&client_argv, "-r");
-        pmix_argv_append_nosize(&client_argv, digit);
-
-        pmix_argv_append_nosize(&client_argv, "-s");
-        pmix_argv_append_nosize(&client_argv, proc.nspace);
-
-        sprintf(digit, "%d", univ_size);
-        pmix_argv_append_nosize(&client_argv, "--ns-size");
-        pmix_argv_append_nosize(&client_argv, digit);
-
-        sprintf(digit, "%d", num_ns);
-        pmix_argv_append_nosize(&client_argv, "--ns-id");
-        pmix_argv_append_nosize(&client_argv, digit);
-
-        sprintf(digit, "%d", 0);
-        pmix_argv_append_nosize(&client_argv, "--base-rank");
-        pmix_argv_append_nosize(&client_argv, digit);
-
-        if (cli_info[cli_counter].pid == 0) {
-            if( !TEST_VERBOSE_GET() ){
-                // Hide clients stdout
-                if (NULL == freopen("/dev/null","w", stdout)) {
-                    return 0;
-                }
+    PMIX_LIST_FOREACH(nspace, server_nspace, server_nspace_t) {
+        PMIX_LIST_FOREACH(rinfo, &nspace->ranks, proc_info_t) {
+            /* fork/exec the test */
+            if (nspace->task_map[rinfo->rank] != my_server_id) {
+                continue;
             }
-            execve(params->binary, client_argv, *client_env);
-            /* Does not return */
-            TEST_ERROR(("execve() failed"));
-            return 0;
+            proc.rank = rinfo->rank;
+            (void)strncpy(proc.nspace, nspace->name, PMIX_MAX_NSLEN);
+            pmix_output(0, "%u: start %s:%u binded to %u", my_server_id,
+                        proc.nspace, proc.rank, nspace->task_map[rinfo->rank] );
+
+            rc = PMIx_server_register_client(&proc, myuid, mygid, NULL, NULL, NULL);
+            if (PMIX_SUCCESS != rc && PMIX_OPERATION_SUCCEEDED != rc) {
+                TEST_ERROR(("Server register client failed with error %d", rc));
+                PMIx_server_finalize();
+                cli_kill_all();
+                return 0;
+            }
+            if (PMIX_SUCCESS != (rc = PMIx_server_setup_fork(&proc, client_env))) {//n
+                TEST_ERROR(("Server fork setup failed with error %d", rc));
+                PMIx_server_finalize();
+                cli_kill_all();
+                return rc;
+            }
+
+            cli_info[cli_counter].pid = fork();
+            if (cli_info[cli_counter].pid < 0) {
+                TEST_ERROR(("Fork failed"));
+                PMIx_server_finalize();
+                cli_kill_all();
+                return 0;
+            }
+            cli_info[cli_counter].rank = rinfo->rank;
+            cli_info[cli_counter].ns = strdup(nspace->name);
+
+            char **client_argv = pmix_argv_copy(*base_argv);
+
+            /* add two last arguments: -r <rank> */
+            sprintf(digit, "%d", proc.rank);
+            pmix_argv_append_nosize(&client_argv, "-r");
+            pmix_argv_append_nosize(&client_argv, digit);
+
+            pmix_argv_append_nosize(&client_argv, "-s");
+            pmix_argv_append_nosize(&client_argv, nspace->name);
+
+            sprintf(digit, "%d", nspace->ntasks);
+            pmix_argv_append_nosize(&client_argv, "--ns-size");
+            pmix_argv_append_nosize(&client_argv, digit);
+
+            sprintf(digit, "%d", nspace->id);
+            pmix_argv_append_nosize(&client_argv, "--ns-id");
+            pmix_argv_append_nosize(&client_argv, digit);
+
+            sprintf(digit, "%d", 0);
+            pmix_argv_append_nosize(&client_argv, "--base-rank");
+            pmix_argv_append_nosize(&client_argv, digit);
+
+            if (cli_info[cli_counter].pid == 0) {
+                if( !TEST_VERBOSE_GET() ){
+                    // Hide clients stdout
+                    if (NULL == freopen("/dev/null","w", stdout)) {
+                        return 0;
+                    }
+                }
+                execve(params->binary, client_argv, *client_env);
+                /* Does not return */
+                TEST_ERROR(("execve() failed"));
+                return 0;
+            }
+            cli_info[cli_counter].state = CLI_FORKED;
+
+            pmix_argv_free(client_argv);
+
+            cli_counter++;
+            rank_counter++;
         }
-        cli_info[cli_counter].state = CLI_FORKED;
-
-        pmix_argv_free(client_argv);
-
-        cli_counter++;
-        rank_counter++;
     }
-    num_ns++;
+
     return rank_counter;
 }

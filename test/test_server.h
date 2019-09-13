@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018      Mellanox Technologies, Inc.
+ * Copyright (c) 2018-2019 Mellanox Technologies, Inc.
  *                         All rights reserved.
  *
  * $COPYRIGHT$
@@ -16,6 +16,7 @@
 #include "pmix_server.h"
 #include "test_common.h"
 
+#define PMIX_TEST_MAX_NS 128
 
 typedef enum {
     CMD_BARRIER_REQUEST,
@@ -52,12 +53,21 @@ struct server_nspace_t
 {
     pmix_list_item_t super;
     char name[PMIX_MAX_NSLEN+1];
-    size_t ntasks; /* total number of tasks in this namespace */
-    size_t ltasks; /* local */
+    uint32_t ntasks; /* total number of tasks in this namespace */
+    uint32_t ltasks; /* local */
+    uint32_t id;
+    pmix_list_t ranks;
     int *task_map;
 };
 typedef struct server_nspace_t server_nspace_t;
 PMIX_EXPORT PMIX_CLASS_DECLARATION(server_nspace_t);
+
+typedef struct proc_info_t
+{
+    pmix_list_item_t super;
+    pmix_rank_t rank;
+} proc_info_t;
+PMIX_EXPORT PMIX_CLASS_DECLARATION(proc_info_t);
 
 extern int my_server_id;
 extern pmix_list_t *server_list;
@@ -71,8 +81,10 @@ int server_fence_contrib(char *data, size_t ndata,
                          pmix_modex_cbfunc_t cbfunc, void *cbdata);
 int server_dmdx_get(const char *nspace, int rank,
                     pmix_modex_cbfunc_t cbfunc, void *cbdata);
-int server_launch_clients(int local_size, int univ_size, int base_rank,
-                   test_params *params, char *** client_env, char ***base_argv);
+void server_add_nspace(uint32_t local_size, uint32_t univ_size,
+                       uint32_t base_rank, uint32_t num_ns);
+int server_launch_clients(test_params *params, char *** client_env,
+                          char ***base_argv);
 
 
 #endif // TEST_SERVER_C
