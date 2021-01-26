@@ -1176,6 +1176,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         free(msg);
         /* send an error reply to the client */
         rc = PMIX_ERR_BAD_PARAM;
+        pmix_output(0, "%d: bad param", __LINE__);
         goto error;
     }
 
@@ -1190,6 +1191,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         free(msg);
         /* send an error reply to the client */
         rc = PMIX_ERR_BAD_PARAM;
+        pmix_output(0, "%d: bad param", __LINE__);
         goto error;
     }
     /* convert it to host byte order */
@@ -1219,6 +1221,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         free(msg);
         /* send an error reply to the client */
         rc = PMIX_ERR_BAD_PARAM;
+        pmix_output(0, "%d: bad param", __LINE__);
         goto error;
     }
 
@@ -1234,6 +1237,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
 
@@ -1247,6 +1251,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
     } else if (1 == pnd->flag) {
@@ -1262,6 +1267,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
         if (sizeof(uint32_t) <= cnt) {
@@ -1273,6 +1279,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
     } else if (2 == pnd->flag) {
@@ -1288,6 +1295,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
         if (sizeof(uint32_t) <= cnt) {
@@ -1299,6 +1307,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
     } else if (3 == pnd->flag || 6 == pnd->flag) {
@@ -1318,6 +1327,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
         if (sizeof(uint32_t) <= cnt) {
@@ -1329,6 +1339,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
         /* they need an id */
@@ -1350,6 +1361,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
         if (sizeof(uint32_t) <= cnt) {
@@ -1361,6 +1373,7 @@ static void connection_handler(int sd, short args, void *cbdata)
            free(msg);
            /* send an error reply to the client */
            rc = PMIX_ERR_BAD_PARAM;
+           pmix_output(0, "%d: bad param", __LINE__);
            goto error;
         }
         PMIX_STRNLEN(msglen, mg, cnt);
@@ -1372,6 +1385,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
 
@@ -1385,6 +1399,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
     } else {
@@ -1392,6 +1407,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         PMIX_ERROR_LOG(PMIX_ERR_NOT_SUPPORTED);
         rc = PMIX_ERR_NOT_SUPPORTED;
         free(msg);
+        pmix_output(0, "%d: bad param", __LINE__);
         goto error;
     }
 
@@ -1406,6 +1422,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         free(msg);
         /* send an error reply to the client */
         rc = PMIX_ERR_BAD_PARAM;
+        pmix_output(0, "%d: bad param", __LINE__);
         goto error;
     }
     major = strtoul(version, &version, 10);
@@ -1434,6 +1451,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
 
@@ -1447,6 +1465,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
 
@@ -1461,6 +1480,7 @@ static void connection_handler(int sd, short args, void *cbdata)
             free(msg);
             /* send an error reply to the client */
             rc = PMIX_ERR_BAD_PARAM;
+            pmix_output(0, "%d: bad param", __LINE__);
             goto error;
         }
     }
@@ -1504,6 +1524,7 @@ static void connection_handler(int sd, short args, void *cbdata)
                 nptr = PMIX_NEW(pmix_namespace_t);
                 if (NULL == nptr) {
                     rc = PMIX_ERR_NOMEM;
+                    pmix_output(0, "%d: nptr nomem", __LINE__);
                     goto error;
                 }
                 nptr->nspace = strdup(nspace);
@@ -1596,6 +1617,7 @@ static void connection_handler(int sd, short args, void *cbdata)
                 PMIX_RELEASE(peer);
                 /* release the msg */
                 free(msg);
+                pmix_output(0, "%d: tool_connected failed", __LINE__);
                 goto error;
             } else {
                 /* just process it locally */
@@ -1646,6 +1668,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         free(msg);
         /* send an error reply to the client */
         rc = PMIX_ERR_NOT_FOUND;
+        pmix_output(0, "%d: nptr unknown", __LINE__);
         goto error;
     }
 
@@ -1663,6 +1686,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         free(msg);
         /* send an error reply to the client */
         rc = PMIX_ERR_NOT_FOUND;
+        pmix_output(0, "%d: rank unknown", __LINE__);
         goto error;
     }
 
@@ -1713,6 +1737,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         pmix_pointer_array_set_item(&pmix_server_globals.clients, peer->index, NULL);
         PMIX_RELEASE(peer);
         /* send an error reply to the client */
+        pmix_output(0, "%d: compat.psec failed", __LINE__);
         goto error;
     }
 
@@ -1724,6 +1749,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         pmix_pointer_array_set_item(&pmix_server_globals.clients, peer->index, NULL);
         PMIX_RELEASE(peer);
         /* send an error reply to the client */
+        pmix_output(0, "%d: compat.bfrops failed", __LINE__);
         goto error;
     }
     /* and the buffer type to match */
@@ -1743,6 +1769,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         pmix_pointer_array_set_item(&pmix_server_globals.clients, peer->index, NULL);
         PMIX_RELEASE(peer);
         /* send an error reply to the client */
+        pmix_output(0, "%d: compat.gds failed", __LINE__);
         goto error;
     }
 
@@ -1791,6 +1818,7 @@ static void connection_handler(int sd, short args, void *cbdata)
         pmix_pointer_array_set_item(&pmix_server_globals.clients, peer->index, NULL);
         PMIX_RELEASE(peer);
         /* send an error reply to the client */
+        pmix_output(0, "%d: validation failed %d", __LINE__, reply);
         goto error;
     }
 
