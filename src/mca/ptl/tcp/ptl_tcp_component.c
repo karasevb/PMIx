@@ -1225,6 +1225,8 @@ static void connection_handler(int sd, short args, void *cbdata)
         goto error;
     }
 
+    pmix_output(0, "connection_handler:%d: pnd->flag %d", __LINE__, pnd->flag);
+
     if (0 == pnd->flag) {
         /* they must be a client, so get their nspace/rank */
         PMIX_SET_PROC_TYPE(&proc_type, PMIX_PROC_CLIENT);

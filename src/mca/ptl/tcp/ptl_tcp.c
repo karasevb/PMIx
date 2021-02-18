@@ -1165,6 +1165,8 @@ static pmix_status_t send_connect_ack(int sd, uint8_t *myflag,
     memcpy(msg+csize, &flag, 1);
     csize += 1;
 
+	pmix_output(0, "send_connect_ack:%d: flag %d", __LINE__, flag);
+
     if (0 == flag) {
         /* if we are a client, provide our nspace/rank */
         memcpy(msg+csize, pmix_globals.myid.nspace, strlen(pmix_globals.myid.nspace));
