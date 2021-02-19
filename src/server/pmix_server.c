@@ -186,6 +186,10 @@ PMIX_EXPORT pmix_status_t PMIx_server_init(pmix_server_module_t *module,
         PMIX_SERVER_GATEWAY,
         NULL
     };
+
+    pmix_output(0, "PMIx_server_init called uid/gid=%d/%d::euid/egid=%d/%d",
+                getuid(), getgid(), geteuid(), getegid());
+
     char *evar;
     pmix_rank_info_t *rinfo;
     pmix_proc_type_t ptype = PMIX_PROC_TYPE_STATIC_INIT;

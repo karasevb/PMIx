@@ -532,6 +532,9 @@ PMIX_EXPORT pmix_status_t PMIx_Init(pmix_proc_t *proc,
     pid_t pid;
     pmix_kval_t *kptr;
 
+    pmix_output(0, "PMIx_Init called uid/gid=%d/%d::euid/egid=%d/%d",
+                getuid(), getgid(), geteuid(), getegid());
+
     PMIX_ACQUIRE_THREAD(&pmix_global_lock);
 
     if (0 < pmix_globals.init_cntr ||
