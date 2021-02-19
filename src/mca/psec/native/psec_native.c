@@ -181,6 +181,7 @@ static pmix_status_t validate_cred(struct pmix_peer_t *peer,
             pmix_output_verbose(2, pmix_psec_base_framework.framework_output,
                                 "psec: getsockopt SO_PEERCRED failed: %s",
                                 strerror (pmix_socket_errno));
+            pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED", __LINE__);
             return PMIX_ERR_INVALID_CRED;
         }
 #if defined(HAVE_STRUCT_UCRED_UID)
@@ -198,6 +199,7 @@ static pmix_status_t validate_cred(struct pmix_peer_t *peer,
             pmix_output_verbose(2, pmix_psec_base_framework.framework_output,
                                 "psec: getsockopt getpeereid failed: %s",
                                 strerror (pmix_socket_errno));
+            pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED", __LINE__);
             return PMIX_ERR_INVALID_CRED;
     }
 #else
@@ -208,6 +210,7 @@ static pmix_status_t validate_cred(struct pmix_peer_t *peer,
          * passed upwards from the client */
         if (NULL == cred) {
             /* not allowed */
+            pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED NULL", __LINE__);
             return PMIX_ERR_INVALID_CRED;
         }
         ln = cred->size;
@@ -218,11 +221,13 @@ static pmix_status_t validate_cred(struct pmix_peer_t *peer,
             ln -= sizeof(uid_t);
             ptr = cred->bytes + sizeof(uid_t);
         } else {
+            pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED size error", __LINE__);
             return PMIX_ERR_INVALID_CRED;
         }
         if (sizeof(gid_t) <= ln) {
             memcpy(&egid, ptr, sizeof(gid_t));
         } else {
+            pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED size error", __LINE__);
             return PMIX_ERR_INVALID_CRED;
         }
     } else if (PMIX_PROTOCOL_UNDEF != pr->protocol) {
@@ -254,9 +259,14 @@ static pmix_status_t validate_cred(struct pmix_peer_t *peer,
     }
 
     /* check uid */
+    pmix_output(0, "validate_cred:%d: pr->info->uid/gid=%d/%d :: euid/egid=%d/%d",
+                __LINE__, pr->info->uid, pr->info->gid, euid, egid);
+
     if (euid != pr->info->uid) {
         pmix_output_verbose(2, pmix_psec_base_framework.framework_output,
                             "psec: socket cred contains invalid uid %u", euid);
+        pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED uid %d != euid %d",
+                    __LINE__, pr->info->uid, euid);
         return PMIX_ERR_INVALID_CRED;
     }
 
@@ -264,6 +274,8 @@ static pmix_status_t validate_cred(struct pmix_peer_t *peer,
     if (egid != pr->info->gid) {
         pmix_output_verbose(2, pmix_psec_base_framework.framework_output,
                             "psec: socket cred contains invalid gid %u", egid);
+        pmix_output(0, "validate_cred:%d PMIX_ERR_INVALID_CRED gid %d != egid %d",
+                    __LINE__, pr->info->gid, egid);
         return PMIX_ERR_INVALID_CRED;
     }
 
